@@ -89,7 +89,7 @@ public sealed class LibretroCore : IDisposable
         _videoCb = OnVideoRefresh;
         _audioCb = OnAudioSample;
         _audioBatchCb = OnAudioBatch;
-        _inputPollCb = static () => { };
+        _inputPollCb = () => InputPoll?.Invoke();
         _inputStateCb = OnInputState;
     }
 
@@ -111,6 +111,9 @@ public sealed class LibretroCore : IDisposable
     public AudioFrameHandler? Audio { get; set; }
 
     public InputStateProvider? Input { get; set; }
+
+    /// <summary>Invoked once per frame, before input is read — latch fresh input here.</summary>
+    public Action? InputPoll { get; set; }
 
     public bool NeedsFullPath { get; private set; }
 
