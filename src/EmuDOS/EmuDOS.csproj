@@ -9,6 +9,11 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
+  <!-- App-owned art embedded in the exe (the shelf backdrop). -->
+  <ItemGroup>
+    <Resource Include="..\..\Assets\bookshelf.png" Link="Assets\bookshelf.png" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
