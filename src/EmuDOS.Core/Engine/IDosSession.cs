@@ -1,0 +1,37 @@
+using EmuDOS.Core.Model;
+
+namespace EmuDOS.Core.Engine;
+
+/// <summary>
+/// A single running game. Owns the engine's run loop and lifecycle; disposing it tears the
+/// emulator down cleanly. Created via <see cref="IDosEngine.CreateSession"/> in the
+/// <see cref="EngineState.Idle"/> state.
+/// </summary>
+public interface IDosSession : IDisposable
+{
+    GameInstance Instance { get; }
+
+    EngineState State { get; }
+
+    /// <summary>Raised whenever <see cref="State"/> changes. May fire on a background thread.</summary>
+    event Action<EngineState>? StateChanged;
+
+    /// <summary>Begin emulation (starts the run loop). No-op if already running.</summary>
+    void Start();
+
+    void Pause();
+
+    void Resume();
+
+    /// <summary>Soft-reset the emulated machine.</summary>
+    void Reset();
+
+    /// <summary>Stop emulation. The session is finished afterwards and should be disposed.</summary>
+    void Stop();
+
+    /// <summary>Write a save state to the given slot. Returns false if unsupported or it failed.</summary>
+    bool SaveState(int slot);
+
+    /// <summary>Load a save state from the given slot. Returns false if unsupported or it failed.</summary>
+    bool LoadState(int slot);
+}
