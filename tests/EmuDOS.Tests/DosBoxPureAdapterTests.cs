@@ -86,6 +86,17 @@ public class DosBoxPureAdapterTests
     }
 
     [Fact]
+    public void Joystick_type_emits_config_line_when_not_auto()
+    {
+        var ch = DosBoxPureAdapter.BuildAutoexecBat(
+            new GameProfile { Joystick = new JoystickSpec { Type = JoystickType.Ch } });
+        Assert.Contains("joystick joysticktype=ch", ch);
+
+        var auto = DosBoxPureAdapter.BuildAutoexecBat(new GameProfile());
+        Assert.DoesNotContain("joysticktype", auto);
+    }
+
+    [Fact]
     public void Vga_machine_omits_svga_only_options()
     {
         var options = DosBoxPureAdapter.BuildCoreOptions(

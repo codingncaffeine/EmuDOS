@@ -97,6 +97,10 @@ public static class DosBoxPureAdapter
         if (!profile.Memory.Umb)
             sb.AppendLine("@config -set \"dos umb=false\"");
 
+        // Gameport joystick type: set the emulated stick the game expects (Auto = default).
+        if (profile.Joystick.Type != JoystickType.Auto)
+            sb.AppendLine($"@config -set \"joystick joysticktype={JoystickValue(profile.Joystick.Type)}\"");
+
         // Exact (non-preset) cycle counts are only reachable from inside autoexec.
         if (profile.Cpu.CyclesMode == CyclesMode.Fixed && profile.Cpu.FixedCycles > 0)
             sb.AppendLine(CultureInvariant($"@CYCLES fixed {profile.Cpu.FixedCycles}"));
@@ -249,6 +253,17 @@ public static class DosBoxPureAdapter
         AdlibMode.Opl3 => "opl3",
         AdlibMode.Opl3Gold => "opl3gold",
         AdlibMode.None => "none",
+        _ => "auto",
+    };
+
+    private static string JoystickValue(JoystickType t) => t switch
+    {
+        JoystickType.None => "none",
+        JoystickType.TwoAxis => "2axis",
+        JoystickType.FourAxis => "4axis",
+        JoystickType.FourAxis2 => "4axis_2",
+        JoystickType.Fcs => "fcs",
+        JoystickType.Ch => "ch",
         _ => "auto",
     };
 

@@ -30,6 +30,8 @@ public sealed record GameProfile
 
     public SoundSpec Sound { get; init; } = new();
 
+    public JoystickSpec Joystick { get; init; } = new();
+
     public LaunchSpec Launch { get; init; } = new();
 
     public IReadOnlyList<MountSpec> Mounts { get; init; } = [];

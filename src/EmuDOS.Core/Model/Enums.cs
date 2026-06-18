@@ -107,6 +107,35 @@ public enum MountKind
 }
 
 /// <summary>
+/// The gameport joystick type a game expects. DOS games read the analog gameport, not the
+/// physical controller — getting this right per game is what makes a modern pad "just work"
+/// as the joystick the game supports. Maps to DOSBox <c>[joystick] joysticktype</c>.
+/// </summary>
+public enum JoystickType
+{
+    /// <summary>Let DOSBox decide (its default).</summary>
+    Auto,
+
+    /// <summary>No joystick.</summary>
+    None,
+
+    /// <summary>Standard 2-axis, 2-button stick.</summary>
+    TwoAxis,
+
+    /// <summary>4-axis stick.</summary>
+    FourAxis,
+
+    /// <summary>Second 4-axis profile (dual sticks).</summary>
+    FourAxis2,
+
+    /// <summary>Thrustmaster Flight Control System.</summary>
+    Fcs,
+
+    /// <summary>CH Flightstick Pro.</summary>
+    Ch,
+}
+
+/// <summary>
 /// Where a profile's values came from, for the curated-base ← user-override layering.
 /// </summary>
 public enum ProfileOrigin
