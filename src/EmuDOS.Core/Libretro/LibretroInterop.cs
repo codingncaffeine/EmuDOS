@@ -1,0 +1,96 @@
+using System.Runtime.InteropServices;
+
+namespace EmuDOS.Core.Libretro;
+
+// libretro callback delegates (all cdecl). Instances passed to a core must be kept alive
+// for the core's lifetime — LibretroCore stores them in fields.
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+[return: MarshalAs(UnmanagedType.I1)]
+internal delegate bool RetroEnvironmentDelegate(uint cmd, nint data);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void RetroVideoRefreshDelegate(nint data, uint width, uint height, nuint pitch);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void RetroAudioSampleDelegate(short left, short right);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate nuint RetroAudioSampleBatchDelegate(nint data, nuint frames);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void RetroInputPollDelegate();
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate short RetroInputStateDelegate(uint port, uint device, uint index, uint id);
+
+// Exported core entry points.
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroInit();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroDeinit();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate uint RetroApiVersion();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroGetSystemInfo(nint info);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroGetSystemAvInfo(nint info);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetEnvironment(RetroEnvironmentDelegate cb);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetVideoRefresh(RetroVideoRefreshDelegate cb);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetAudioSample(RetroAudioSampleDelegate cb);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetAudioSampleBatch(RetroAudioSampleBatchDelegate cb);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetInputPoll(RetroInputPollDelegate cb);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetInputState(RetroInputStateDelegate cb);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroReset();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroRun();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] internal delegate bool RetroLoadGame(nint game);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroUnloadGame();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate nuint RetroSerializeSize();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] internal delegate bool RetroSerialize(nint data, nuint size);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] internal delegate bool RetroUnserialize(nint data, nuint size);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetControllerPortDevice(uint port, uint device);
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct RetroSystemInfo
+{
+    public nint library_name;
+    public nint library_version;
+    public nint valid_extensions;
+    [MarshalAs(UnmanagedType.I1)] public bool need_fullpath;
+    [MarshalAs(UnmanagedType.I1)] public bool block_extract;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct RetroGameGeometry
+{
+    public uint base_width;
+    public uint base_height;
+    public uint max_width;
+    public uint max_height;
+    public float aspect_ratio;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct RetroSystemTiming
+{
+    public double fps;
+    public double sample_rate;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct RetroSystemAvInfo
+{
+    public RetroGameGeometry geometry;
+    public RetroSystemTiming timing;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct RetroGameInfo
+{
+    public nint path;   // const char*
+    public nint data;   // const void*
+    public nuint size;  // size_t
+    public nint meta;   // const char*
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct RetroVariable
+{
+    public nint key;    // const char*
+    public nint value;  // const char*
+}
