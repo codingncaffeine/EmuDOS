@@ -1,3 +1,4 @@
+using EmuDOS.Core.Catalog;
 using EmuDOS.Core.Infrastructure;
 using EmuDOS.Core.Library;
 using EmuDOS.Core.Model;
@@ -8,10 +9,12 @@ namespace EmuDOS.Core.Import;
 
 /// <summary>
 /// Imports a folder or archive (.zip/.rar/.7z) into a gamebox: extracts/copies the content,
-/// finds executables, classifies the result, and writes a baseline profile.json. The curated
-/// catalog (later) enriches that baseline; here we just get the game on the shelf.
+/// finds executables, classifies the result, and writes a profile.json. When a
+/// <see cref="ProfileResolver"/> is supplied, a recognized game is enriched with its curated
+/// config on the way in.
 /// </summary>
-public sealed class ImportPipeline(AppPaths paths, GameboxStore store) : IImportPipeline
+public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileResolver? resolver = null)
+    : IImportPipeline
 {
     private static readonly string[] ArchiveExtensions = [".zip", ".rar", ".7z"];
     private static readonly string[] ExecutableExtensions = [".exe", ".com", ".bat"];
@@ -57,6 +60,16 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store) : IImport
                 SourceMedia = media,
                 Launch = new LaunchSpec { Executable = chosen },
             };
+
+            // Enrich with curated config if the catalog recognizes the content.
+            if (resolver is not null)
+            {
+                var contentFiles = Directory.EnumerateFiles(box.ContentDir, "*", SearchOption.AllDirectories)
+                    .Select(Path.GetFileName)
+                    .Where(n => !string.IsNullOrEmpty(n))!;
+                profile = resolver.Resolve(profile, contentFiles!);
+            }
+
             store.WriteProfile(gameboxPath, profile);
 
             return new ImportResult
