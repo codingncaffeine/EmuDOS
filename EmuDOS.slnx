@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EmuDOS.Core/EmuDOS.Core.csproj" />
+    <Project Path="src/EmuDOS.Metadata/EmuDOS.Metadata.csproj" />
+    <Project Path="src/EmuDOS/EmuDOS.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EmuDOS.Tests/EmuDOS.Tests.csproj" />
+  </Folder>
+</Solution>

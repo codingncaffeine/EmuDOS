@@ -1,0 +1,25 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# NuGet
+*.nupkg
+packages/
+
+# Local-only planning / design notes (never pushed — public repo)
+local-notes/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
