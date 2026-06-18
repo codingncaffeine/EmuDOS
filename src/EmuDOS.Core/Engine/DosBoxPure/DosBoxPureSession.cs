@@ -44,6 +44,9 @@ public sealed class DosBoxPureSession : IDosSession
 
     public EngineState State => _state;
 
+    /// <summary>Details of the exception that faulted the session, if any (for diagnostics).</summary>
+    public string? LastError { get; private set; }
+
     public event Action<EngineState>? StateChanged;
 
     public void Start()
@@ -120,8 +123,9 @@ public sealed class DosBoxPureSession : IDosSession
 
             PumpFrames(_core.GetAvInfo());
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = ex.ToString();
             Fault();
         }
         finally

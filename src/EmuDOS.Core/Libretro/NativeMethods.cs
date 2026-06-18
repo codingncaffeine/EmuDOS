@@ -11,7 +11,10 @@ internal static partial class NativeMethods
 {
     public const uint LOAD_WITH_ALTERED_SEARCH_PATH = 0x00000008;
 
-    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    // LibraryImport (unlike DllImport) does not auto-append the W/A suffix, so name the
+    // Unicode export explicitly.
+    [LibraryImport("kernel32.dll", EntryPoint = "LoadLibraryExW", SetLastError = true,
+        StringMarshalling = StringMarshalling.Utf16)]
     public static partial nint LoadLibraryEx(string lpFileName, nint hFile, uint dwFlags);
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
