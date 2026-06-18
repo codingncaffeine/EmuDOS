@@ -1,0 +1,6 @@
+# Normalize line endings; check out CRLF on Windows. Silences LF/CRLF warnings.
+* text=auto
+*.cs text diff=csharp
+*.md text
+*.csproj text
+*.slnx text
