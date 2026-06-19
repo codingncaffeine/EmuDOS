@@ -22,6 +22,14 @@
     <Resource Include="Assets\Fonts\DotGothic16-Regular.ttf" />
   </ItemGroup>
 
+  <!-- Our MT-32 synth shim (LGPL munt; source under src/native/mt32). Ships next to the exe. -->
+  <ItemGroup>
+    <None Include="..\native\mt32\emudos_mt32.dll" Condition="Exists('..\native\mt32\emudos_mt32.dll')">
+      <Link>emudos_mt32.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

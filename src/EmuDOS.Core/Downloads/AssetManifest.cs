@@ -9,7 +9,6 @@ public static class AssetManifest
 {
     public const string DosBoxPureFileName = "dosbox_pure_libretro.dll";
     public const string CatalogFileName = "catalog.db";
-    public const string Mt32ShimFileName = "emudos_mt32.dll";
 
     private const string ReleaseBase = "https://github.com/codingncaffeine/EmuDOS/releases/latest/download";
 
@@ -37,18 +36,10 @@ public static class AssetManifest
         Category = AssetCategory.Catalog,
     };
 
-    /// <summary>Our MT-32 synth shim — enables Roland MT-32 music + the LCD when ROMs are present.</summary>
-    public static DownloadAsset Mt32Shim { get; } = new()
-    {
-        Id = "mt32_shim",
-        DisplayName = "MT-32 sound module",
-        Description = "Roland MT-32 music and LCD (also needs the MT-32 ROMs). Optional.",
-        Url = $"{ReleaseBase}/{Mt32ShimFileName}",
-        Kind = DownloadKind.File,
-        FileName = Mt32ShimFileName,
-        Category = AssetCategory.Native,
-    };
+    // Note: the MT-32 synth shim (emudos_mt32.dll) ships WITH the app — it's our own small
+    // LGPL-based DLL, so unlike the GPL core there's no reason to download it. The only
+    // user-supplied MT-32 piece is the Roland ROMs (copyrighted; detected, never distributed).
 
     /// <summary>All assets the Downloads tab can offer.</summary>
-    public static IReadOnlyList<DownloadAsset> All { get; } = [DosBoxPure, Catalog, Mt32Shim];
+    public static IReadOnlyList<DownloadAsset> All { get; } = [DosBoxPure, Catalog];
 }

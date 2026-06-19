@@ -27,8 +27,7 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
-# Native MT-32 shim build artifacts (built via src/native/mt32/build.cmd)
-src/native/mt32/*.dll
+# Native MT-32 shim intermediate build artifacts (the .dll IS committed + shipped with the app)
 src/native/mt32/*.obj
 src/native/mt32/*.exp
 src/native/mt32/*.lib
