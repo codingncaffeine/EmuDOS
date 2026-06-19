@@ -41,6 +41,11 @@ public partial class PreferencesWindow : Window
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
             .ToList();
 
+        bool hasRoms = _services.SystemFiles.HasMt32;
+        Set(Mt32RomStatus,
+            hasRoms ? "✓ MT-32 ROMs detected" : "✗ Not found — drag the ROMs in to enable MT-32 audio",
+            hasRoms ? Success : Pending);
+
         if (game is null)
         {
             GameOptionsTab.Visibility = Visibility.Collapsed;
