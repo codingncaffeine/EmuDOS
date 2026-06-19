@@ -35,6 +35,12 @@ Drag a **game folder** or a **`.zip`** onto the EmuDOS window. EmuDOS will:
 
 You can drop **multiple** items at once. You can also drop a **folder of MT-32 ROMs** (or the loose `.rom` files) — those get routed to the MT-32 system folder instead of being imported as a game.
 
+### CD games (disc images)
+
+Drop a **`.iso`**, **`.cue`**/**`.bin`**, or **`.chd`** and EmuDOS imports it as a CD game: the image is mounted as drive **D:** every launch. The first launch boots to a DOS prompt with a hint — switch to the disc (`D:`) and run its installer (`SETUP` or `INSTALL`). The game installs onto the writable **C:** drive; afterward, use **Run ▸** once to pick the installed program and plain clicks launch it (with the CD still mounted on D:).
+
+> EmuDOS runs **DOS** games. A disc for a **Windows** game (e.g. a Win95/98 title) generally won't install or run, because its installer is a Windows program, not a DOS one.
+
 ---
 
 ## The shelf
