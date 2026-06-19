@@ -94,7 +94,7 @@ public sealed class AppServices
         var steamGridDb = string.IsNullOrWhiteSpace(Settings.SteamGridDbKey)
             ? null
             : new SteamGridDbClient(_screenScraperHttp, Settings.SteamGridDbKey);
-        Manuals = new ManualService(screenScraper);
+        Manuals = new ManualService(screenScraper, new ArchiveOrgManualClient(_screenScraperHttp));
         return new ArtService(screenScraper, steamGridDb);
     }
 }
