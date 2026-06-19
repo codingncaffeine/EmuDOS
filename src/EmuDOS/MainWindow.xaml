@@ -13,6 +13,10 @@
         AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver"
         PreviewKeyDown="OnWindowKeyDown">
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+
     <Grid>
         <Grid.ContextMenu>
             <ContextMenu>
@@ -64,6 +68,9 @@
                                                VerticalAlignment="Center"/>
                                 </Border>
                                 <Image Source="{Binding Cover}" Stretch="Fill"/>
+                                <Border BorderBrush="#E03535" BorderThickness="3" CornerRadius="2"
+                                        Background="#33E03535"
+                                        Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

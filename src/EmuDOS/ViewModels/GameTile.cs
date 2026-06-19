@@ -14,6 +14,9 @@ public sealed partial class GameTile : ObservableObject
     [ObservableProperty]
     private BitmapImage? _cover;
 
+    [ObservableProperty]
+    private bool _isSelected;
+
     public GameTile(LibraryGame game)
     {
         _game = game;

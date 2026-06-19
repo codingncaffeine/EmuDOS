@@ -105,6 +105,17 @@ public sealed class LibraryDatabase
         return boxes.Count;
     }
 
+    /// <summary>Remove a game from the index (its Media rows cascade). The gamebox on disk is
+    /// deleted separately by the caller.</summary>
+    public void Remove(long gameId)
+    {
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM Games WHERE Id = $id;";
+        Bind(cmd, "$id", gameId);
+        cmd.ExecuteNonQuery();
+    }
+
     public void RecordPlay(long gameId)
     {
         using var connection = Open();

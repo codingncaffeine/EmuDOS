@@ -90,6 +90,42 @@ public sealed partial class MainViewModel : ObservableObject
         await FetchMissingArtAsync();
     }
 
+    public bool HasSelection => Games.Any(g => g.IsSelected);
+
+    public void SelectAll()
+    {
+        foreach (var tile in Games)
+            tile.IsSelected = true;
+    }
+
+    public void ClearSelection()
+    {
+        foreach (var tile in Games)
+            tile.IsSelected = false;
+    }
+
+    /// <summary>
+    /// Remove the given games from the library and delete their gameboxes. Box art is preserved
+    /// in the art cache so re-importing the same game restores the cover without a download.
+    /// </summary>
+    public void DeleteGames(IEnumerable<GameTile> tiles)
+    {
+        foreach (var tile in tiles.ToList())
+        {
+            _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath); // safety net
+            try { _services.Library.Remove(tile.Id); }
+            catch { /* keep going */ }
+            try
+            {
+                if (Directory.Exists(tile.Game.GameboxPath))
+                    Directory.Delete(tile.Game.GameboxPath, recursive: true);
+            }
+            catch { /* leave the folder if locked; index row is gone */ }
+        }
+
+        LoadLibrary();
+    }
+
     /// <summary>Fetch box covers for any games missing one, updating each tile as it arrives.</summary>
     public async Task FetchMissingArtAsync()
     {
@@ -105,12 +141,23 @@ public sealed partial class MainViewModel : ObservableObject
                 continue;
             }
 
+            // Restore from the art cache first (e.g. re-import of a previously-deleted game) —
+            // avoids a needless re-download.
+            if (_services.ArtCache.TryRestore(tile.Title, tile.MediaDir))
+            {
+                tile.LoadCover();
+                continue;
+            }
+
             Report($"Fetching art for {tile.Title}…", busy: true);
             try
             {
                 var path = await _services.Art.FetchBoxFrontAsync(tile.Title, tile.MediaDir);
                 if (path is not null)
+                {
                     tile.LoadCover();
+                    _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath);
+                }
             }
             catch
             {

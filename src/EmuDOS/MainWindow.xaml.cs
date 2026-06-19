@@ -56,6 +56,37 @@ public partial class MainWindow : Window
             SaveLayout();
             e.Handled = true;
         }
+        else if (e.Key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            Vm.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete)
+        {
+            DeleteSelected();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            Vm.ClearSelection();
+        }
+    }
+
+    private void DeleteSelected()
+    {
+        var selected = Vm!.Games.Where(g => g.IsSelected).ToList();
+        if (selected.Count == 0)
+            return;
+
+        var names = selected.Count <= 3
+            ? string.Join(", ", selected.Select(g => g.Title))
+            : $"{selected.Count} games";
+        var confirm = MessageBox.Show(
+            $"Remove {names} from your library?\n\nThe box art is kept, so re-importing won't re-download it.",
+            "Delete from library", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        if (confirm == MessageBoxResult.Yes)
+            Vm.DeleteGames(selected);
     }
 
     private void OnBoxMouseDown(object sender, MouseButtonEventArgs e)
@@ -105,9 +136,19 @@ public partial class MainWindow : Window
         _dragTile = null;
         _dragPanel = null;
 
-        // A plain click (not editing) launches the game.
-        if (Vm?.IsEditMode != true && (sender as FrameworkElement)?.DataContext is GameTile tile)
-            await LaunchGameAsync(tile);
+        if (Vm?.IsEditMode == true || (sender as FrameworkElement)?.DataContext is not GameTile tile)
+            return;
+
+        // Ctrl+click toggles selection (for delete); a plain click launches.
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            tile.IsSelected = !tile.IsSelected;
+            e.Handled = true;
+            return;
+        }
+
+        Vm.ClearSelection();
+        await LaunchGameAsync(tile);
     }
 
     /// <summary>Re-apply a saved calibration layout (manual box positions) by title.</summary>

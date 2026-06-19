@@ -23,6 +23,7 @@ public sealed class AppServices
         Settings = SettingsStore.Load();
         Store = new GameboxStore();
         Library = new LibraryDatabase(Paths, Store);
+        ArtCache = new ArtCache(Paths);
         Catalog = new CatalogDatabase(System.IO.Path.Combine(Paths.CatalogDir, "catalog.db"));
         Resolver = new ProfileResolver(Catalog);
         Import = new ImportPipeline(Paths, Store, Resolver);
@@ -45,6 +46,8 @@ public sealed class AppServices
     public GameboxStore Store { get; }
 
     public LibraryDatabase Library { get; }
+
+    public ArtCache ArtCache { get; }
 
     public CatalogDatabase Catalog { get; }
 
