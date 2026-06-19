@@ -116,5 +116,37 @@
                 </StackPanel>
             </ScrollViewer>
         </TabItem>
+
+        <TabItem Header="Downloads">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="22,18">
+                    <TextBlock Text="Downloads" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,14"
+                               Text="Components are fetched on demand rather than bundled (for size and licensing). The core is required; the catalog and MT-32 module are optional."/>
+                    <ItemsControl x:Name="DownloadList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource BgSecondary}" BorderBrush="{StaticResource BorderNormal}"
+                                        BorderThickness="1" CornerRadius="4" Padding="14,10" Margin="0,0,0,10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="11" Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="11" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="{Binding ActionText}" VerticalAlignment="Center"
+                                                Padding="16,6" IsEnabled="{Binding CanDownload}" Click="OnDownloadClick"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
     </TabControl>
 </Window>

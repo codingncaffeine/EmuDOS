@@ -13,6 +13,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         Services = new AppServices();
+        Core.Audio.Mt32Synth.RegisterNativeResolver(Services.Paths.CoresDir);
         var viewModel = new MainViewModel(Services);
         var window = new MainWindow { DataContext = viewModel };
         window.Show();

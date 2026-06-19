@@ -23,6 +23,9 @@ public enum AssetCategory
     /// without an app update.
     /// </summary>
     Catalog,
+
+    /// <summary>A native helper DLL we build (e.g. the MT-32 shim), loaded via a resolver.</summary>
+    Native,
 }
 
 /// <summary>A downloadable third-party asset (not bundled, for size/licensing reasons).</summary>
@@ -31,6 +34,9 @@ public sealed record DownloadAsset
     public required string Id { get; init; }
 
     public required string DisplayName { get; init; }
+
+    /// <summary>One-line explanation shown in the Downloads tab.</summary>
+    public string Description { get; init; } = string.Empty;
 
     public required string Url { get; init; }
 

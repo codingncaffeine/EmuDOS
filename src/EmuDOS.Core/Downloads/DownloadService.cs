@@ -20,7 +20,7 @@ public sealed class DownloadService(HttpClient http, AppPaths paths) : IDownload
         ArgumentNullException.ThrowIfNull(asset);
         var dir = asset.Category switch
         {
-            AssetCategory.Core => paths.CoresDir,
+            AssetCategory.Core or AssetCategory.Native => paths.CoresDir,
             AssetCategory.SoundFont or AssetCategory.Bios => paths.SystemDir,
             AssetCategory.Catalog => paths.CatalogDir,
             _ => paths.DataRoot,

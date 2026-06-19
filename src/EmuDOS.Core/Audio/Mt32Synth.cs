@@ -27,6 +27,24 @@ public sealed partial class Mt32Synth : IDisposable
     [LibraryImport("emudos_mt32")]
     private static partial void mt32_free(nint handle);
 
+    /// <summary>
+    /// Let the shim be loaded from <paramref name="searchDir"/> (where the Downloads tab installs
+    /// it) before falling back to the default search (next to the exe, for dev). Call once at startup.
+    /// </summary>
+    public static void RegisterNativeResolver(string searchDir)
+    {
+        NativeLibrary.SetDllImportResolver(typeof(Mt32Synth).Assembly, (name, _, _) =>
+        {
+            if (name == "emudos_mt32")
+            {
+                var candidate = Path.Combine(searchDir, "emudos_mt32.dll");
+                if (File.Exists(candidate) && NativeLibrary.TryLoad(candidate, out var handle))
+                    return handle;
+            }
+            return nint.Zero; // fall back to the default resolver
+        });
+    }
+
     private nint _handle;
 
     private byte _status;

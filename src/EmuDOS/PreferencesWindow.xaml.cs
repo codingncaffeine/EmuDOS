@@ -3,6 +3,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Model;
 using EmuDOS.Services;
 using EmuDOS.ViewModels;
@@ -35,6 +36,10 @@ public partial class PreferencesWindow : Window
         SsUser.Text = services.Settings.ScreenScraperUser;
         SsPass.Password = services.Settings.ScreenScraperPassword;
         SgdbKey.Text = services.Settings.SteamGridDbKey;
+
+        DownloadList.ItemsSource = AssetManifest.All
+            .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
+            .ToList();
 
         if (game is null)
         {
@@ -211,6 +216,22 @@ public partial class PreferencesWindow : Window
     {
         if (Owner is MainWindow main)
             _ = main.RefetchMissingArtAsync();
+    }
+
+    // ── Downloads ─────────────────────────────────────────────────────────────────
+
+    private async void OnDownloadClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadRow row)
+            return;
+
+        row.IsBusy = true;
+        var progress = new Progress<DownloadProgress>(p =>
+            row.SetProgress(p.Fraction is double f ? $"Downloading… {f:P0}" : "Downloading…"));
+
+        var result = await _services.Downloads.DownloadAsync(row.Asset, progress);
+        row.SetResult(result.Success, result.Error);
+        row.IsBusy = false;
     }
 
     private static void Set(TextBlock target, string text, Brush brush)
