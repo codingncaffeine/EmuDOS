@@ -9,6 +9,11 @@ namespace EmuDOS.Core.Libretro;
 [return: MarshalAs(UnmanagedType.I1)]
 internal delegate bool RetroEnvironmentDelegate(uint cmd, nint data);
 
+// retro_log_printf_t is variadic: void log(level, fmt, ...). We read the level + format string and
+// the first vararg, so the common log(level, "%s", msg) pattern resolves to the actual message.
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void RetroLogPrintf(int level, nint fmt, nint arg1);
+
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate void RetroVideoRefreshDelegate(nint data, uint width, uint height, nuint pitch);
 

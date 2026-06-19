@@ -27,4 +27,7 @@ public interface IEngineHost
 
     /// <summary>Current keyboard/mouse/gamepad state, polled by the engine each frame.</summary>
     IInputSource Input { get; }
+
+    /// <summary>A log line emitted by the emulator core (level, message). Default: ignored.</summary>
+    void OnCoreLog(int level, string message) { }
 }

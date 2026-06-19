@@ -97,13 +97,42 @@ public sealed class DosBoxPureSession : IDosSession
         {
             _core = new LibretroCore(_corePath)
             {
+                CoreLog = _host.OnCoreLog,
                 SystemDirectory = _systemDir,
                 SaveDirectory = _instance.SavePath,
             };
 
             var plan = DosBoxPureAdapter.BuildLaunchPlan(_instance.Profile);
             Directory.CreateDirectory(_instance.ContentPath);
-            File.WriteAllText(Path.Combine(_instance.ContentPath, "DOSBOX.BAT"), plan.AutoexecBat);
+
+            string loadTarget;
+            if (_instance.Profile.SourceMedia == SourceMediaType.Iso)
+            {
+                // Loading a .conf runs as plain DOSBox (no union C:). Mount the content as C: and the
+                // disc image as a CD-ROM on D: — both via host paths, which MOUNT resolves directly.
+                var disc = Directory.EnumerateFiles(_instance.ContentPath)
+                    .FirstOrDefault(f => f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
+                                      || f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)
+                                      || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase));
+
+                var conf = new System.Text.StringBuilder();
+                conf.AppendLine("[autoexec]");
+                conf.AppendLine($"mount c \"{_instance.ContentPath}\"");
+                conf.AppendLine("c:");
+                if (disc is not null)
+                    // IMGMOUNT (not MOUNT) for an image file; relative name resolves on the C: drive,
+                    // which is a plain local drive in .conf mode — so the union no longer blocks it.
+                    conf.AppendLine($"IMGMOUNT D: \"{Path.GetFileName(disc)}\" -t iso");
+
+                loadTarget = Path.Combine(_instance.GameboxPath, "emudos.conf");
+                File.WriteAllText(loadTarget, conf.ToString());
+            }
+            else
+            {
+                File.WriteAllText(Path.Combine(_instance.ContentPath, "DOSBOX.BAT"), plan.AutoexecBat);
+                loadTarget = _instance.ContentPath;
+            }
+
             _core.Options = plan.CoreOptions;
 
             _core.Video = (data, w, h, pitch, fmt) =>
@@ -133,7 +162,7 @@ public sealed class DosBoxPureSession : IDosSession
             _core.SetCallbacks();
             _core.Init();
 
-            if (!_core.LoadGame(_instance.ContentPath))
+            if (!_core.LoadGame(loadTarget))
             {
                 Fault();
                 return;

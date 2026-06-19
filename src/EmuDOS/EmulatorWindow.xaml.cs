@@ -162,6 +162,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             Dispatcher.BeginInvoke(RenderFrame);
     }
 
+    public void OnCoreLog(int level, string message)
+    {
+        var tag = level switch { 0 => "DBG", 1 => "INFO", 2 => "WARN", 3 => "ERR", _ => "LOG" };
+        _log.Info($"[core:{tag}] {message}");
+    }
+
     public void SetAudioSampleRate(int sampleRate)
     {
         Dispatcher.Invoke(() =>

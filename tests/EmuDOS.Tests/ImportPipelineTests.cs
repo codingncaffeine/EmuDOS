@@ -102,11 +102,12 @@ public class ImportPipelineTests
 
         Assert.True(result.Success, result.Error);
         Assert.Equal(ImportClassification.NeedsInstall, result.Classification);
-        Assert.True(File.Exists(Path.Combine(result.GameboxPath!, "content", "Some Game.iso")));
+        // Copied under a short, space-free name so DOS/IMGMOUNT can open it.
+        Assert.True(File.Exists(Path.Combine(result.GameboxPath!, "content", "disc.iso")));
 
         var launch = store.ReadProfile(result.GameboxPath!).Launch;
         Assert.Null(launch.Executable);
-        Assert.Contains(launch.PreCommands, c => c.Contains("IMGMOUNT D:") && c.Contains("Some Game.iso"));
+        Assert.Contains(launch.PreCommands, c => c.Contains("IMGMOUNT D:") && c.Contains("disc.iso"));
     }
 
     private static (ImportPipeline, GameboxStore) NewPipeline()

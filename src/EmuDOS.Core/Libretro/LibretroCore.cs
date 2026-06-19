@@ -41,6 +41,7 @@ public sealed class LibretroCore : IDisposable
     private readonly RetroMidiRead _midiRead;
     private readonly RetroMidiWrite _midiWrite;
     private readonly RetroMidiFlush _midiFlush;
+    private readonly RetroLogPrintf _logPrintf;
 
     private readonly RetroInit _init;
     private readonly RetroDeinit _deinit;
@@ -104,6 +105,39 @@ public sealed class LibretroCore : IDisposable
         _midiRead = _ => false;
         _midiWrite = (value, _) => { MidiByte?.Invoke(value); return true; };
         _midiFlush = () => true;
+        _logPrintf = OnCoreLog;
+    }
+
+    /// <summary>Raised for each log line the core emits (level, message). Wired to a file by the host.</summary>
+    public Action<int, string>? CoreLog;
+
+    private void OnCoreLog(int level, nint fmt, nint arg1)
+    {
+        try
+        {
+            var format = Marshal.PtrToStringAnsi(fmt);
+            if (string.IsNullOrEmpty(format))
+                return;
+
+            // dosbox logs as e.g. "[DOSBOX LOG] %s" with the real message in the first vararg.
+            // If the first format specifier is %s, substitute arg1 (a string); otherwise leave the
+            // format as-is (reading arg1 as a string when it's an int would be unsafe).
+            var message = format;
+            int pct = format.IndexOf('%');
+            if (pct >= 0 && pct + 1 < format.Length && format[pct + 1] == 's' && arg1 != 0)
+            {
+                var inserted = Marshal.PtrToStringAnsi(arg1) ?? string.Empty;
+                message = format[..pct] + inserted + format[(pct + 2)..];
+            }
+
+            message = message.TrimEnd('\n', '\r');
+            if (!string.IsNullOrEmpty(message))
+                CoreLog?.Invoke(level, message);
+        }
+        catch
+        {
+            // Logging must never destabilize the core.
+        }
     }
 
     /// <summary>dosbox_pure_* option values returned to the core on <c>GET_VARIABLE</c>.</summary>
@@ -293,6 +327,11 @@ public sealed class LibretroCore : IDisposable
 
             case EnvGetSaveDirectory:
                 Marshal.WriteIntPtr(data, GetCachedAnsi(SaveDirectory));
+                return true;
+
+            case EnvGetLogInterface:
+                if (data != 0)
+                    Marshal.WriteIntPtr(data, Marshal.GetFunctionPointerForDelegate(_logPrintf));
                 return true;
 
             case EnvGetCoreOptionsVersion:

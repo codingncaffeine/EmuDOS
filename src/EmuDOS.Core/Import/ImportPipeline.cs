@@ -123,19 +123,19 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
     private static bool IsDiscImage(string path) =>
         DiscImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
 
-    // Copy a disc image into the content folder — for a .cue, also its referenced tracks; for a
-    // bare .bin, a sibling .cue if present. Returns the file name to IMGMOUNT.
+    // Copy a disc image into the content folder under a short, space-free 8.3-friendly name —
+    // DOS/dosbox can't open an image with a long, spaced filename. Returns the name to IMGMOUNT.
     private static string CopyDiscImage(string sourcePath, string contentDir)
     {
         Directory.CreateDirectory(contentDir);
-        var name = Path.GetFileName(sourcePath);
-        var srcDir = Path.GetDirectoryName(sourcePath) ?? string.Empty;
         var ext = Path.GetExtension(sourcePath).ToLowerInvariant();
 
-        File.Copy(sourcePath, Path.Combine(contentDir, name), overwrite: true);
-
+        // For a .cue, names must match its FILE references, so keep them but only safe if short.
         if (ext == ".cue")
         {
+            var name = Path.GetFileName(sourcePath);
+            File.Copy(sourcePath, Path.Combine(contentDir, name), overwrite: true);
+            var srcDir = Path.GetDirectoryName(sourcePath) ?? string.Empty;
             foreach (var track in CueReferencedFiles(sourcePath))
             {
                 var src = Path.Combine(srcDir, track);
@@ -145,18 +145,9 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             return name;
         }
 
-        if (ext == ".bin")
-        {
-            var cue = Path.ChangeExtension(sourcePath, ".cue");
-            if (File.Exists(cue))
-            {
-                var cueName = Path.GetFileName(cue);
-                File.Copy(cue, Path.Combine(contentDir, cueName), overwrite: true);
-                return cueName; // mounting the .cue pulls in the .bin track
-            }
-        }
-
-        return name;
+        var dest = "disc" + ext; // disc.iso / disc.chd / disc.bin
+        File.Copy(sourcePath, Path.Combine(contentDir, dest), overwrite: true);
+        return dest;
     }
 
     private static IEnumerable<string> CueReferencedFiles(string cuePath)
