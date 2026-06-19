@@ -34,6 +34,7 @@ public sealed class LibretroCore : IDisposable
     private readonly RetroAudioSampleBatchDelegate _audioBatchCb;
     private readonly RetroInputPollDelegate _inputPollCb;
     private readonly RetroInputStateDelegate _inputStateCb;
+    private RetroKeyboardEventDelegate? _keyboardEvent;
 
     private readonly RetroInit _init;
     private readonly RetroDeinit _deinit;
@@ -114,6 +115,13 @@ public sealed class LibretroCore : IDisposable
 
     /// <summary>Invoked once per frame, before input is read — latch fresh input here.</summary>
     public Action? InputPoll { get; set; }
+
+    /// <summary>
+    /// Push a key event into the core via its keyboard callback (dosbox_pure reads the keyboard
+    /// this way). No-op until the core registers a callback. Call on the core thread.
+    /// </summary>
+    public void SendKeyEvent(bool down, uint keycode, uint character, ushort modifiers) =>
+        _keyboardEvent?.Invoke(down, keycode, character, modifiers);
 
     public bool NeedsFullPath { get; private set; }
 
@@ -281,6 +289,17 @@ public sealed class LibretroCore : IDisposable
             case EnvSetCoreOptionsDisplay:
             case EnvSetSupportNoGame:
                 // Acknowledged; we feed values through GET_VARIABLE regardless of the schema.
+                return true;
+
+            case EnvSetKeyboardCallback:
+                // The core gives us its retro_keyboard_event_t; we push key events into it.
+                if (data != 0)
+                {
+                    nint fp = Marshal.ReadIntPtr(data);
+                    _keyboardEvent = fp != 0
+                        ? Marshal.GetDelegateForFunctionPointer<RetroKeyboardEventDelegate>(fp)
+                        : null;
+                }
                 return true;
 
             case EnvSetHwRender:

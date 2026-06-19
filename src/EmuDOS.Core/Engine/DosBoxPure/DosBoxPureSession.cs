@@ -109,7 +109,7 @@ public sealed class DosBoxPureSession : IDosSession
             _core.Video = (data, w, h, pitch, fmt) =>
                 _host.SubmitVideoFrame(new VideoFrame(data, w, h, pitch, fmt));
             _core.Audio = _host.SubmitAudioFrames;
-            _core.InputPoll = () => _mouse = _host.Input.PollMouse();
+            _core.InputPoll = PollInput;
             _core.Input = QueryInput;
 
             _core.SetCallbacks();
@@ -176,11 +176,42 @@ public sealed class DosBoxPureSession : IDosSession
         }
     }
 
-    private short QueryInput(uint port, uint device, uint index, uint id) => device switch
+    // Runs on the core thread, once per frame, before input is read: latch the mouse and push
+    // any queued key transitions into the core's keyboard callback.
+    private void PollInput()
     {
-        DeviceKeyboard => _host.Input.IsKeyDown((DosKey)id) ? (short)1 : (short)0,
-        DeviceJoypad => _host.Input.IsButtonDown((int)port, (PadButton)id) ? (short)1 : (short)0,
-        DeviceMouse => id switch
+        _mouse = _host.Input.PollMouse();
+        while (_host.Input.TryDequeueKey(out var key))
+        {
+            _core?.SendKeyEvent(key.Down, key.KeyCode, key.Character, key.Modifiers);
+            Interlocked.Increment(ref _keysSent);
+        }
+    }
+
+    private long _kbQueries, _kbHits, _padQueries, _mouseQueries, _otherQueries, _keysSent;
+
+    public string InputDiagnostics =>
+        $"keysSent={Interlocked.Read(ref _keysSent)} kbQ={Interlocked.Read(ref _kbQueries)} "
+        + $"padQ={Interlocked.Read(ref _padQueries)} mouseQ={Interlocked.Read(ref _mouseQueries)} "
+        + $"otherQ={Interlocked.Read(ref _otherQueries)}";
+
+    private short QueryInput(uint port, uint device, uint index, uint id)
+    {
+        switch (device)
+        {
+            case DeviceKeyboard: Interlocked.Increment(ref _kbQueries); break;
+            case DeviceJoypad: Interlocked.Increment(ref _padQueries); break;
+            case DeviceMouse: Interlocked.Increment(ref _mouseQueries); break;
+            default: Interlocked.Increment(ref _otherQueries); break;
+        }
+
+        return device switch
+        {
+            DeviceKeyboard => _host.Input.IsKeyDown((DosKey)id)
+                ? Hit()
+                : (short)0,
+            DeviceJoypad => _host.Input.IsButtonDown((int)port, (PadButton)id) ? (short)1 : (short)0,
+            DeviceMouse => id switch
         {
             MouseX => (short)_mouse.X,
             MouseY => (short)_mouse.Y,
@@ -188,9 +219,16 @@ public sealed class DosBoxPureSession : IDosSession
             MouseRight => _mouse.Right ? (short)1 : (short)0,
             MouseMiddle => _mouse.Middle ? (short)1 : (short)0,
             _ => (short)0,
-        },
-        _ => (short)0,
-    };
+            },
+            _ => (short)0,
+        };
+    }
+
+    private short Hit()
+    {
+        Interlocked.Increment(ref _kbHits);
+        return 1;
+    }
 
     private bool DoSaveState(int slot)
     {

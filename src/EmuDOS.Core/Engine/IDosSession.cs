@@ -34,4 +34,7 @@ public interface IDosSession : IDisposable
 
     /// <summary>Load a save state from the given slot. Returns false if unsupported or it failed.</summary>
     bool LoadState(int slot);
+
+    /// <summary>Diagnostic snapshot of input polling (which devices the core queried). For debugging.</summary>
+    string InputDiagnostics => string.Empty;
 }

@@ -10,6 +10,7 @@ internal static class LibretroConstants
     public const uint EnvGetCanDupe = 3;
     public const uint EnvGetSystemDirectory = 9;
     public const uint EnvSetPixelFormat = 10;
+    public const uint EnvSetKeyboardCallback = 12;
     public const uint EnvSetHwRender = 14;
     public const uint EnvGetVariable = 15;
     public const uint EnvSetVariables = 16;

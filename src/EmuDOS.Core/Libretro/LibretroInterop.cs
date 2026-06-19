@@ -24,6 +24,12 @@ internal delegate void RetroInputPollDelegate();
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate short RetroInputStateDelegate(uint port, uint device, uint index, uint id);
 
+// retro_keyboard_event_t: the core hands us this via SET_KEYBOARD_CALLBACK and we invoke it to
+// push key events in (dosbox_pure reads the keyboard this way, not via input_state polling).
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void RetroKeyboardEventDelegate(
+    [MarshalAs(UnmanagedType.U1)] bool down, uint keycode, uint character, ushort keyModifiers);
+
 // Exported core entry points.
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroInit();
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroDeinit();

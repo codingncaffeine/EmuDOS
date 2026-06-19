@@ -31,6 +31,12 @@ internal sealed class StubEngineHost : IEngineHost, IInputSource
 
     public bool IsKeyDown(DosKey key) => false;
 
+    public bool TryDequeueKey(out KeyEvent keyEvent)
+    {
+        keyEvent = default;
+        return false;
+    }
+
     public MouseDelta PollMouse() => MouseDelta.None;
 
     public bool IsButtonDown(int port, PadButton button) => false;

@@ -40,6 +40,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private readonly object _inputLock = new();
     private readonly HashSet<DosKey> _keysDown = [];
+    private readonly System.Collections.Concurrent.ConcurrentQueue<KeyEvent> _keyEvents = new();
     private int _mouseDx;
     private int _mouseDy;
     private bool _mouseLeft;
@@ -135,7 +136,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         buffer.AddSamples(_audioBytes, 0, source.Length);
 
         if (++_audioBatches % 300 == 1)
-            _log.Info($"audio batch #{_audioBatches} frames={interleavedStereo.Length / 2} buffered={buffer.BufferedBytes}B state={_audioOut?.PlaybackState}");
+            _log.Info($"audio #{_audioBatches} buffered={buffer.BufferedBytes}B | input: {_session.InputDiagnostics}");
     }
 
     private void CopyXrgb8888(in VideoFrame frame, int w, int h)
@@ -190,6 +191,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             return _keysDown.Contains(key);
     }
 
+    public bool TryDequeueKey(out KeyEvent keyEvent) => _keyEvents.TryDequeue(out keyEvent);
+
     public MouseDelta PollMouse()
     {
         lock (_inputLock)
@@ -208,24 +211,41 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
-        _log.Info($"KeyDown {e.Key} (sys={e.SystemKey}) -> {key}");
-        if (key != DosKey.None)
-        {
-            lock (_inputLock)
-                _keysDown.Add(key);
-            e.Handled = true;
-        }
+        if (key == DosKey.None)
+            return;
+
+        bool isNew;
+        lock (_inputLock)
+            isNew = _keysDown.Add(key); // false when this is an auto-repeat
+
+        if (isNew)
+            _keyEvents.Enqueue(new KeyEvent(true, (uint)key, 0, Modifiers()));
+        e.Handled = true;
     }
 
     private void OnKeyUp(object sender, KeyEventArgs e)
     {
         var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
-        if (key != DosKey.None)
-        {
-            lock (_inputLock)
-                _keysDown.Remove(key);
-            e.Handled = true;
-        }
+        if (key == DosKey.None)
+            return;
+
+        bool wasDown;
+        lock (_inputLock)
+            wasDown = _keysDown.Remove(key);
+
+        if (wasDown)
+            _keyEvents.Enqueue(new KeyEvent(false, (uint)key, 0, Modifiers()));
+        e.Handled = true;
+    }
+
+    private static ushort Modifiers()
+    {
+        ushort m = 0;
+        var mod = Keyboard.Modifiers;
+        if (mod.HasFlag(ModifierKeys.Shift)) m |= (ushort)KeyModifier.Shift;
+        if (mod.HasFlag(ModifierKeys.Control)) m |= (ushort)KeyModifier.Ctrl;
+        if (mod.HasFlag(ModifierKeys.Alt)) m |= (ushort)KeyModifier.Alt;
+        return m;
     }
 
     private void OnMouseMove(object sender, MouseEventArgs e)
