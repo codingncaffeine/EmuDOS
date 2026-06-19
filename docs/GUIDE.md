@@ -118,6 +118,10 @@ To re-fetch art manually:
 - **Right-click a game → Download box art** — re-fetches that game's cover (handy if it grabbed the wrong one or none; it only overwrites on success).
 - **Right-click the shelf background → Download missing art** — fetches covers for every game that doesn't have one.
 
+### Drag your own cover
+
+Found a better cover online? **Drag the image straight onto the game's box** — from a web browser (e.g. an image search) or a local image file. EmuDOS copies it into that game's folder, normalizes it to PNG, and shows it scaled to the box. Covers are stored per game at `gamebox/media/box-front.png`.
+
 ---
 
 ## Manuals
