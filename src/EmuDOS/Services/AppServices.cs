@@ -1,4 +1,5 @@
 using System.Net.Http;
+using EmuDOS.Core.Audio;
 using EmuDOS.Core.Catalog;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Import;
@@ -24,6 +25,7 @@ public sealed class AppServices
         Store = new GameboxStore();
         Library = new LibraryDatabase(Paths, Store);
         ArtCache = new ArtCache(Paths);
+        SystemFiles = new SystemFileInstaller(Paths);
         Catalog = new CatalogDatabase(System.IO.Path.Combine(Paths.CatalogDir, "catalog.db"));
         Resolver = new ProfileResolver(Catalog);
         Import = new ImportPipeline(Paths, Store, Resolver);
@@ -48,6 +50,8 @@ public sealed class AppServices
     public LibraryDatabase Library { get; }
 
     public ArtCache ArtCache { get; }
+
+    public SystemFileInstaller SystemFiles { get; }
 
     public CatalogDatabase Catalog { get; }
 

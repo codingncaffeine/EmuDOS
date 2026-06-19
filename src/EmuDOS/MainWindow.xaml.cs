@@ -240,7 +240,7 @@ public partial class MainWindow : Window
     private async void OnDrop(object sender, DragEventArgs e)
     {
         if (Vm is not null && e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
-            await Vm.ImportPathsAsync(paths);
+            await Vm.HandleDropAsync(paths);
     }
 
     private void OnDragOver(object sender, DragEventArgs e)

@@ -61,6 +61,37 @@ public sealed partial class MainViewModel : ObservableObject
         ShowStatus = false;
     }
 
+    /// <summary>
+    /// Handle a drop: MT-32 ROMs and SoundFonts are installed into the system folder
+    /// (Boxer-style "just drop the BIOS in"); everything else is imported as a game.
+    /// </summary>
+    public async Task HandleDropAsync(IEnumerable<string> paths)
+    {
+        var all = paths.ToList();
+        var systemFiles = all.Where(p => File.Exists(p) && Core.Audio.SystemFileInstaller.IsSystemFile(p)).ToList();
+
+        if (systemFiles.Count > 0)
+        {
+            var installed = new List<string>();
+            foreach (var file in systemFiles)
+            {
+                var description = _services.SystemFiles.Install(file);
+                if (description is not null)
+                    installed.Add(description);
+            }
+
+            if (installed.Count > 0)
+            {
+                var ready = _services.SystemFiles.HasMt32 ? " MT-32 is ready." : string.Empty;
+                Report($"Installed {string.Join(", ", installed)}.{ready}", busy: false);
+            }
+        }
+
+        var content = all.Except(systemFiles).ToList();
+        if (content.Count > 0)
+            await ImportPathsAsync(content);
+    }
+
     /// <summary>Import each dropped path (folder/archive) and refresh the shelf.</summary>
     public async Task ImportPathsAsync(IEnumerable<string> paths)
     {
