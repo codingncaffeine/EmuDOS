@@ -74,7 +74,9 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 {
                     Title = title,
                     SourceMedia = media,
-                    Launch = new LaunchSpec { PreCommands = [$"IMGMOUNT D: \"C:\\{discMount}\" -t iso"] },
+                    // Relative path (resolved via C:'s underlying local drive) — an absolute C:\ path
+                    // lands inside dosbox_pure's union mount, where IMGMOUNT can't reach the host file.
+                    Launch = new LaunchSpec { PreCommands = [$"IMGMOUNT D: \"{discMount}\" -t iso"] },
                 };
             }
             else
