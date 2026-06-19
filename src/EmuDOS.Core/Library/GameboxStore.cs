@@ -54,6 +54,32 @@ public sealed class GameboxStore
         };
     }
 
+    /// <summary>Read per-game user state (window size, remembered exes); defaults if absent/invalid.</summary>
+    public GameUserState ReadState(string gameboxRoot)
+    {
+        var box = new Gamebox(gameboxRoot);
+        if (!File.Exists(box.StatePath))
+            return new GameUserState();
+        try
+        {
+            using var stream = File.OpenRead(box.StatePath);
+            return JsonSerializer.Deserialize<GameUserState>(stream, JsonOptions) ?? new GameUserState();
+        }
+        catch
+        {
+            return new GameUserState();
+        }
+    }
+
+    public void WriteState(string gameboxRoot, GameUserState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var box = new Gamebox(gameboxRoot);
+        Directory.CreateDirectory(box.Root);
+        using var stream = File.Create(box.StatePath);
+        JsonSerializer.Serialize(stream, state, JsonOptions);
+    }
+
     public bool IsGamebox(string directory) => new Gamebox(directory).Exists;
 
     /// <summary>Every gamebox under a gameboxes directory (the basis for rebuilding the index).</summary>

@@ -9,6 +9,7 @@ using System.Windows.Media;
 using EmuDOS.Controls;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Engine.DosBoxPure;
+using EmuDOS.Core.Model;
 using EmuDOS.ViewModels;
 
 namespace EmuDOS;
@@ -54,8 +55,64 @@ public partial class MainWindow : Window
         menu.Items.Add(preferences);
         menu.Items.Add(openInDos);
         menu.Items.Add(manual);
+
+        // A "Run" submenu of executables we've used before plus any found in the content, so the
+        // user can pick the right one when the default launch doesn't land on a runnable program.
+        var services = ((App)Application.Current).Services;
+        var executables = OrderedExecutables(
+            services.Store.ReadState(tile.Game.GameboxPath),
+            ScanExecutables(Path.Combine(tile.Game.GameboxPath, "content")));
+        if (executables.Count > 0)
+        {
+            var run = new MenuItem { Header = "Run" };
+            foreach (var exe in executables.Take(25))
+            {
+                var item = new MenuItem { Header = exe };
+                item.Click += async (_, _) => await LaunchGameAsync(tile, executableOverride: exe);
+                run.Items.Add(item);
+            }
+            menu.Items.Add(run);
+        }
+
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    private static readonly string[] ExecutableExtensions = [".exe", ".com", ".bat"];
+
+    /// <summary>DOS-relative paths of runnable files under the content (minus the DOSBox wrapper).</summary>
+    private static List<string> ScanExecutables(string contentDir)
+    {
+        var found = new List<string>();
+        if (!Directory.Exists(contentDir))
+            return found;
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(contentDir, "*.*", SearchOption.AllDirectories))
+            {
+                if (!ExecutableExtensions.Contains(Path.GetExtension(file).ToLowerInvariant()))
+                    continue;
+                var name = Path.GetFileName(file).ToLowerInvariant();
+                if (name is "dosbox.exe" or "dosbox.bat")
+                    continue; // the eXoDOS wrapper, not the game
+                found.Add(Path.GetRelativePath(contentDir, file).Replace('/', '\\'));
+            }
+        }
+        catch
+        {
+            // Best-effort scan; an unreadable folder just yields fewer options.
+        }
+        return found;
+    }
+
+    private static List<string> OrderedExecutables(GameUserState state, List<string> scanned)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<string>();
+        foreach (var exe in state.KnownExecutables.Concat(scanned))
+            if (!string.IsNullOrWhiteSpace(exe) && seen.Add(exe))
+                ordered.Add(exe);
+        return ordered;
     }
 
     private async Task DownloadManualAsync(GameTile tile)
@@ -317,7 +374,7 @@ public partial class MainWindow : Window
             await LaunchGameAsync(Vm.Games[0]);
     }
 
-    private async Task LaunchGameAsync(GameTile tile, bool bootToDos = false)
+    private async Task LaunchGameAsync(GameTile tile, bool bootToDos = false, string? executableOverride = null)
     {
         if (Vm is null)
             return;
@@ -341,7 +398,22 @@ public partial class MainWindow : Window
         {
             // No game launch — just configure + drop to the C: prompt (content is mounted as C:)
             // so the user can browse files and run the game's SETUP (e.g. to choose Roland MT-32).
-            instance = instance with { Profile = instance.Profile with { Launch = new Core.Model.LaunchSpec() } };
+            instance = instance with { Profile = instance.Profile with { Launch = new LaunchSpec() } };
+        }
+        else
+        {
+            // Pick the executable: an explicit choice from the Run menu wins; otherwise use the
+            // configured one, falling back to whatever ran successfully last time (Boxer-style).
+            var configured = instance.Profile.Launch.Executable;
+            var chosen = executableOverride
+                ?? (string.IsNullOrWhiteSpace(configured)
+                        ? services.Store.ReadState(tile.Game.GameboxPath).LastExecutable
+                        : configured);
+            if (!string.Equals(chosen, configured, StringComparison.OrdinalIgnoreCase))
+                instance = instance with
+                {
+                    Profile = instance.Profile with { Launch = instance.Profile.Launch with { Executable = chosen } },
+                };
         }
 
         var engine = new DosBoxPureEngine(

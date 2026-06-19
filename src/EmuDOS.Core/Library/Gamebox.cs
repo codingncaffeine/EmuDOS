@@ -21,6 +21,9 @@ public sealed class Gamebox(string root)
     /// <summary>Save data and save states.</summary>
     public string SavesDir => Path.Combine(Root, "saves");
 
+    /// <summary>Per-game user state (window size, remembered executables) as JSON.</summary>
+    public string StatePath => Path.Combine(Root, "state.json");
+
     /// <summary>True if this folder holds a profile (i.e. is a gamebox).</summary>
     public bool Exists => File.Exists(ProfilePath);
 }

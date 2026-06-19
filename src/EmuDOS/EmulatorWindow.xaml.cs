@@ -41,6 +41,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private Mt32LcdWindow? _lcdWindow;
     private DispatcherTimer? _lcdTimer;
 
+    private readonly GameInstance _instance;
     private readonly AppLog _log;
 
     private readonly object _inputLock = new();
@@ -62,10 +63,20 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         InitializeComponent();
         DarkChrome.Apply(this);
+        _instance = instance;
         Title = $"EmuDOS — {instance.Profile.Title}";
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
         _lut = BuildLut(instance.Profile.Display);
+
+        // Restore the window size this game was last played at (saved on close).
+        var state = ((App)Application.Current).Services.Store.ReadState(instance.GameboxPath);
+        if (state.WindowWidth is int savedW and > 200 && state.WindowHeight is int savedH and > 150)
+        {
+            Width = savedW;
+            Height = savedH;
+        }
+
         _session = engine.CreateSession(instance, this);
         Loaded += OnLoadedGrabFocus;
         Activated += (_, _) => Keyboard.Focus(this);
@@ -400,6 +411,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        SaveGameState();
         _lcdTimer?.Stop();
         _lcdWindow?.Close();
         _session.Stop();
@@ -408,5 +420,28 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _audioOut?.Dispose();
         _audioOut = null;
         _audioBuffer = null;
+    }
+
+    // Persist the window size and the executable that ran, so next launch restores both.
+    private void SaveGameState()
+    {
+        try
+        {
+            var size = WindowState == WindowState.Normal
+                ? new Size(ActualWidth, ActualHeight)
+                : RestoreBounds.Size;
+
+            var store = ((App)Application.Current).Services.Store;
+            var state = store.ReadState(_instance.GameboxPath) with
+            {
+                WindowWidth = (int)size.Width,
+                WindowHeight = (int)size.Height,
+            };
+            store.WriteState(_instance.GameboxPath, state.WithExecutable(_instance.Profile.Launch.Executable));
+        }
+        catch
+        {
+            // State is a convenience; never let saving it block closing the game.
+        }
     }
 }
