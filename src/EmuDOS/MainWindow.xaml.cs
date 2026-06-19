@@ -99,9 +99,8 @@ public partial class MainWindow : Window
             {
                 if (!ExecutableExtensions.Contains(Path.GetExtension(file).ToLowerInvariant()))
                     continue;
-                var name = Path.GetFileName(file).ToLowerInvariant();
-                if (name is "dosbox.exe" or "dosbox.bat")
-                    continue; // the eXoDOS wrapper, not the game
+                if (Core.Import.DosExecutables.IsRuntimeHelper(file))
+                    continue; // DOS extenders / the DOSBox wrapper aren't launch targets
                 found.Add(Path.GetRelativePath(contentDir, file).Replace('/', '\\'));
             }
         }

@@ -54,6 +54,23 @@ public class ImportPipelineTests
     }
 
     [Fact]
+    public async Task Dos_extender_is_skipped_for_the_bat_launcher()
+    {
+        // Mirrors Grand Theft Auto: the import must not pick the DOS/4GW extender as the program.
+        var source = TempDir();
+        Directory.CreateDirectory(Path.Combine(source, "GTADOS"));
+        File.WriteAllText(Path.Combine(source, "GTADOS", "DOS4GW.EXE"), "x");
+        File.WriteAllText(Path.Combine(source, "GTADOS", "GTA.EXE"), "x");
+        File.WriteAllText(Path.Combine(source, "GTADOS.BAT"), "x");
+        var (pipeline, _) = NewPipeline();
+
+        var result = await pipeline.ImportAsync(source);
+
+        Assert.Equal(ImportClassification.ReadyToPlay, result.Classification);
+        Assert.Equal("GTADOS.BAT", result.ChosenExecutable);
+    }
+
+    [Fact]
     public async Task Imports_a_zip_with_a_nested_executable()
     {
         var dir = TempDir();

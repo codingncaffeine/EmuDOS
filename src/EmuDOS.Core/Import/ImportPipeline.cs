@@ -137,21 +137,25 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
 
     private static (ImportClassification, string?) Classify(List<string> executables, string title)
     {
-        var games = executables.Where(e => !IsInstaller(e)).ToList();
+        // A DOS extender means the real launcher is almost always a .bat that invokes it.
+        bool hasExtender = executables.Any(DosExecutables.IsExtender);
+        var launchable = executables.Where(e => !DosExecutables.IsRuntimeHelper(e)).ToList();
+
+        var games = launchable.Where(e => !IsInstaller(e)).ToList();
         if (games.Count > 0)
-            return (ImportClassification.ReadyToPlay, PickBest(games, title));
+            return (ImportClassification.ReadyToPlay, PickBest(games, title, hasExtender));
 
-        var installers = executables.Where(IsInstaller).ToList();
+        var installers = launchable.Where(IsInstaller).ToList();
         if (installers.Count > 0)
-            return (ImportClassification.NeedsInstall, PickBest(installers, title));
+            return (ImportClassification.NeedsInstall, PickBest(installers, title, hasExtender));
 
-        return (ImportClassification.Unknown, executables.FirstOrDefault());
+        return (ImportClassification.Unknown, launchable.FirstOrDefault() ?? executables.FirstOrDefault());
     }
 
     private static bool IsInstaller(string relativePath) =>
         InstallerStems.Contains(Path.GetFileNameWithoutExtension(relativePath).ToLowerInvariant());
 
-    private static string PickBest(List<string> candidates, string title)
+    private static string PickBest(List<string> candidates, string title, bool preferBat)
     {
         var titleTokens = title.Split([' ', '_', '-', '.'], StringSplitOptions.RemoveEmptyEntries)
             .Select(t => t.ToLowerInvariant())
@@ -161,6 +165,11 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             titleTokens.Contains(Path.GetFileNameWithoutExtension(c).ToLowerInvariant()));
         if (titled is not null)
             return titled;
+
+        // Extender-based game (e.g. DOS/4GW): the launcher batch is the right target, not the raw exe.
+        if (preferBat
+            && candidates.FirstOrDefault(c => c.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)) is { } bat)
+            return bat;
 
         return candidates.FirstOrDefault(c => c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             ?? candidates[0];
