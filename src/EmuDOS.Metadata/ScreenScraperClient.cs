@@ -40,7 +40,22 @@ public sealed partial class ScreenScraperClient
 
         foreach (var candidate in NameCandidates(gameName))
         {
-            var url = await FetchBoxForNameAsync(candidate, cancellationToken);
+            var url = await FetchMediaForNameAsync(candidate, PickBox, cancellationToken);
+            if (url is not null)
+                return url;
+        }
+
+        return null;
+    }
+
+    /// <summary>Find the game's manual (PDF) URL, or null if ScreenScraper has none.</summary>
+    public async Task<string?> FindManualUrlAsync(string gameName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+
+        foreach (var candidate in NameCandidates(gameName))
+        {
+            var url = await FetchMediaForNameAsync(candidate, PickManual, cancellationToken);
             if (url is not null)
                 return url;
         }
@@ -80,7 +95,8 @@ public sealed partial class ScreenScraperClient
             : null;
     }
 
-    private async Task<string?> FetchBoxForNameAsync(string gameName, CancellationToken cancellationToken)
+    private async Task<string?> FetchMediaForNameAsync(
+        string gameName, Func<JsonArray, string?> pick, CancellationToken cancellationToken)
     {
         var url = $"{BaseUrl}jeuInfos.php?{Auth()}&systemeid={DosSystemId}&romnom={Esc(gameName)}";
         using var response = await _http.GetAsync(url, cancellationToken);
@@ -93,7 +109,7 @@ public sealed partial class ScreenScraperClient
         catch { return null; }
 
         var medias = doc?["response"]?["jeu"]?["medias"]?.AsArray();
-        return medias is null ? null : PickBox(medias);
+        return medias is null ? null : pick(medias);
     }
 
     /// <summary>Original title, then a variant with collection/episode noise stripped.</summary>
@@ -143,6 +159,25 @@ public sealed partial class ScreenScraperClient
         }
 
         return null;
+    }
+
+    private static string? PickManual(JsonArray medias)
+    {
+        var manuals = medias
+            .Where(m => string.Equals(m?["type"]?.GetValue<string>(), "manuel", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (manuals.Count == 0)
+            return null;
+
+        foreach (var region in RegionPreference)
+        {
+            var match = manuals.FirstOrDefault(m =>
+                string.Equals(m?["region"]?.GetValue<string>(), region, StringComparison.OrdinalIgnoreCase));
+            if (match?["url"]?.GetValue<string>() is { Length: > 0 } regionalUrl)
+                return regionalUrl;
+        }
+
+        return manuals[0]?["url"]?.GetValue<string>();
     }
 
     private string Auth() =>

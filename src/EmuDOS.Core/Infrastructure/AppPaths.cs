@@ -28,6 +28,9 @@ public sealed class AppPaths
     /// <summary>Save data and save states.</summary>
     public string SavesDir => Path.Combine(DataRoot, "Saves");
 
+    /// <summary>Downloaded game manuals, organized into a sub-folder per game.</summary>
+    public string ManualsDir => Path.Combine(DataRoot, "Manuals");
+
     /// <summary>Downloaded curated config database updates (override the embedded baseline).</summary>
     public string CatalogDir => Path.Combine(DataRoot, "Catalog");
 

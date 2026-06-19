@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -47,10 +48,48 @@ public partial class MainWindow : Window
         var openInDos = new MenuItem { Header = "Open in DOS" };
         openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
 
+        var manual = new MenuItem { Header = "Download manual" };
+        manual.Click += async (_, _) => await DownloadManualAsync(tile);
+
         menu.Items.Add(preferences);
         menu.Items.Add(openInDos);
+        menu.Items.Add(manual);
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    private async Task DownloadManualAsync(GameTile tile)
+    {
+        if (Vm is null)
+            return;
+
+        var services = ((App)Application.Current).Services;
+        Vm.Report($"Downloading manual for {tile.Title}…", busy: true);
+        try
+        {
+            var dir = Path.Combine(services.Paths.ManualsDir, SanitizeName(tile.Title));
+            var path = await services.Manuals.FetchManualAsync(tile.Title, dir);
+            if (path is null)
+            {
+                Vm.Report($"No manual found for {tile.Title}.", busy: false);
+                return;
+            }
+
+            Vm.Report($"Manual saved to {dir}", busy: false);
+            try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+            catch { /* no PDF handler — the file is saved regardless */ }
+        }
+        catch (Exception ex)
+        {
+            Vm.Report($"Manual download failed: {ex.Message}", busy: false);
+        }
+    }
+
+    private static string SanitizeName(string name)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        return name.Trim();
     }
 
     private void OpenOptions(GameTile tile)

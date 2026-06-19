@@ -66,6 +66,8 @@ public sealed class AppServices
 
     public ArtService Art { get; private set; }
 
+    public ManualService Manuals { get; private set; } = null!;
+
     /// <summary>Rebuild the art service after the ScreenScraper login changes.</summary>
     public void ReloadArtService() => Art = BuildArtService();
 
@@ -92,6 +94,7 @@ public sealed class AppServices
         var steamGridDb = string.IsNullOrWhiteSpace(Settings.SteamGridDbKey)
             ? null
             : new SteamGridDbClient(_screenScraperHttp, Settings.SteamGridDbKey);
+        Manuals = new ManualService(screenScraper);
         return new ArtService(screenScraper, steamGridDb);
     }
 }
