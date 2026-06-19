@@ -50,7 +50,9 @@
                                   Cursor="Hand" ToolTip="{Binding Title}"
                                   MouseLeftButtonDown="OnBoxMouseDown"
                                   MouseMove="OnBoxMouseMove"
-                                  MouseLeftButtonUp="OnBoxMouseUp">
+                                  MouseLeftButtonUp="OnBoxMouseUp"
+                                  MouseRightButtonUp="OnBoxRightClick"
+                                  Background="Transparent">
                                 <Grid.Effect>
                                     <DropShadowEffect BlurRadius="7" ShadowDepth="3" Opacity="0.55"/>
                                 </Grid.Effect>

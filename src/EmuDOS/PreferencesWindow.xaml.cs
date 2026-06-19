@@ -1,28 +1,151 @@
+using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using EmuDOS.Core.Model;
 using EmuDOS.Services;
+using EmuDOS.ViewModels;
 
 namespace EmuDOS;
 
-/// <summary>The tabbed preferences/management window. First tab: Snaps (art accounts).</summary>
+/// <summary>
+/// Tabbed preferences. "Game Options" edits one game's curated DOSBox settings (saved as a
+/// per-game override); "Snaps" holds the art-source accounts.
+/// </summary>
 public partial class PreferencesWindow : Window
 {
     private static readonly Brush Pending = new SolidColorBrush(Color.FromRgb(0xA8, 0x9A, 0x86));
     private static readonly Brush Success = new SolidColorBrush(Color.FromRgb(0x9F, 0xE0, 0xA0));
     private static readonly Brush Failure = new SolidColorBrush(Color.FromRgb(0xE0, 0x85, 0x85));
 
-    private readonly AppServices _services;
+    private static readonly int[] MemoryPresets = [4, 8, 16, 32, 64];
 
-    public PreferencesWindow(AppServices services)
+    private readonly AppServices _services;
+    private readonly GameTile? _game;
+    private GameProfile? _profile;
+
+    public PreferencesWindow(AppServices services, GameTile? game = null)
     {
         InitializeComponent();
         _services = services;
+        _game = game;
 
         SsUser.Text = services.Settings.ScreenScraperUser;
         SsPass.Password = services.Settings.ScreenScraperPassword;
         SgdbKey.Text = services.Settings.SteamGridDbKey;
+
+        if (game is null)
+        {
+            GameOptionsTab.Visibility = Visibility.Collapsed;
+            Tabs.SelectedIndex = 1; // Snaps
+        }
+        else
+        {
+            _profile = _services.Store.ReadProfile(game.Game.GameboxPath);
+            PopulateGameOptions();
+            Tabs.SelectedItem = GameOptionsTab;
+        }
     }
+
+    // ── Game Options ────────────────────────────────────────────────────────────
+
+    private void PopulateGameOptions()
+    {
+        if (_profile is null)
+            return;
+
+        GameTitle.Text = _profile.Title;
+
+        CpuCyclesMode.ItemsSource = Enum.GetValues<CyclesMode>();
+        CpuCyclesMode.SelectedItem = _profile.Cpu.CyclesMode;
+        FixedCycles.Text = _profile.Cpu.FixedCycles > 0 ? _profile.Cpu.FixedCycles.ToString() : "60000";
+        UpdateCyclesEnabled();
+
+        MachineTypeBox.ItemsSource = Enum.GetValues<MachineType>();
+        MachineTypeBox.SelectedItem = _profile.Machine.Machine;
+
+        MemoryBox.ItemsSource = MemoryPresets.Contains(_profile.Memory.SizeMb)
+            ? MemoryPresets
+            : MemoryPresets.Append(_profile.Memory.SizeMb).OrderBy(x => x).ToArray();
+        MemoryBox.SelectedItem = _profile.Memory.SizeMb;
+
+        SoundCardBox.ItemsSource = Enum.GetValues<SoundBlasterType>();
+        SoundCardBox.SelectedItem = _profile.Sound.SoundBlaster;
+
+        MidiBox.ItemsSource = Enum.GetValues<MidiDevice>();
+        MidiBox.SelectedItem = _profile.Sound.Midi;
+
+        AspectBox.IsChecked = _profile.Machine.AspectCorrection;
+        GameOptionsStatus.Text = string.Empty;
+    }
+
+    private void OnCyclesModeChanged(object sender, SelectionChangedEventArgs e) => UpdateCyclesEnabled();
+
+    private void UpdateCyclesEnabled()
+    {
+        bool fixedMode = CpuCyclesMode.SelectedItem is CyclesMode.Fixed;
+        if (FixedCycles is not null)
+            FixedCycles.IsEnabled = fixedMode;
+        if (CyclesHint is not null)
+            CyclesHint.Visibility = fixedMode ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnSaveGameOptions(object sender, RoutedEventArgs e)
+    {
+        if (_game is null || _profile is null)
+            return;
+
+        int cycles = int.TryParse(FixedCycles.Text, out var c) && c > 0 ? c : _profile.Cpu.FixedCycles;
+
+        var updated = _profile with
+        {
+            Cpu = _profile.Cpu with
+            {
+                CyclesMode = (CyclesMode)CpuCyclesMode.SelectedItem!,
+                FixedCycles = cycles,
+            },
+            Machine = _profile.Machine with
+            {
+                Machine = (MachineType)MachineTypeBox.SelectedItem!,
+                AspectCorrection = AspectBox.IsChecked == true,
+            },
+            Memory = _profile.Memory with { SizeMb = (int)MemoryBox.SelectedItem! },
+            Sound = _profile.Sound with
+            {
+                SoundBlaster = (SoundBlasterType)SoundCardBox.SelectedItem!,
+                Midi = (MidiDevice)MidiBox.SelectedItem!,
+            },
+            Origin = ProfileOrigin.UserOverride,
+        };
+
+        _services.Store.WriteProfile(_game.Game.GameboxPath, updated);
+        _profile = updated;
+        GameOptionsStatus.Foreground = Success;
+        GameOptionsStatus.Text = "Saved — applies next launch.";
+    }
+
+    private void OnResetGameOptions(object sender, RoutedEventArgs e)
+    {
+        if (_game is null || _profile is null)
+            return;
+
+        var contentDir = _services.Store.Resolve(_game.Game.GameboxPath).ContentPath;
+        var names = Directory.Exists(contentDir)
+            ? Directory.EnumerateFiles(contentDir).Select(Path.GetFileName).OfType<string>()
+            : Enumerable.Empty<string>();
+
+        var baseline = _profile with { Origin = ProfileOrigin.Default };
+        var resolved = _services.Resolver.Resolve(baseline, names);
+        _services.Store.WriteProfile(_game.Game.GameboxPath, resolved);
+        _profile = resolved;
+
+        PopulateGameOptions();
+        GameOptionsStatus.Foreground = Success;
+        GameOptionsStatus.Text = "Reset to catalog default.";
+    }
+
+    // ── Snaps (art accounts) ──────────────────────────────────────────────────────
 
     private async void OnLoginScreenScraper(object sender, RoutedEventArgs e)
     {

@@ -31,6 +31,16 @@ public partial class MainWindow : Window
         new PreferencesWindow(services) { Owner = this }.ShowDialog();
     }
 
+    private void OnBoxRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GameTile tile })
+        {
+            var services = ((App)Application.Current).Services;
+            new PreferencesWindow(services, tile) { Owner = this }.ShowDialog();
+            e.Handled = true;
+        }
+    }
+
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
         if (Vm is null)
