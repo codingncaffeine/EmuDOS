@@ -122,6 +122,7 @@ public sealed class DosBoxPureSession : IDosSession
             {
                 _core.Audio = MixMt32;
                 _core.MidiByte = _synth.FeedByte;
+                SierraSoundConfig.EnsureMt32(_instance.ContentPath); // Sierra: point soundDrv at MT-32
             }
             else
             {
