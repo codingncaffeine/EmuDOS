@@ -107,6 +107,11 @@ EmuDOS downloads art automatically. To improve coverage, open **Preferences → 
 
 After logging in, EmuDOS backfills art for any games still missing a cover.
 
+To re-fetch art manually:
+
+- **Right-click a game → Download box art** — re-fetches that game's cover (handy if it grabbed the wrong one or none; it only overwrites on success).
+- **Right-click the shelf background → Download missing art** — fetches covers for every game that doesn't have one.
+
 ---
 
 ## Manuals
