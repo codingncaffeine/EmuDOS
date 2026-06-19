@@ -38,6 +38,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private readonly byte[]? _lut; // brightness/gamma lookup; null = no adjustment (fast path)
 
+    private Mt32LcdWindow? _lcdWindow;
+    private DispatcherTimer? _lcdTimer;
+
     private readonly AppLog _log;
 
     private readonly object _inputLock = new();
@@ -79,6 +82,29 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             Keyboard.Focus(this);
             _log.Info($"Loaded IsActive={IsActive} KbFocused={IsKeyboardFocused} FocusWithin={IsKeyboardFocusWithin}");
         }, DispatcherPriority.Input);
+
+        // Poll the MT-32 LCD; the synth is created asynchronously on the engine thread, so show
+        // the display the moment it appears and keep its text updated.
+        _lcdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _lcdTimer.Tick += UpdateLcd;
+        _lcdTimer.Start();
+    }
+
+    private void UpdateLcd(object? sender, EventArgs e)
+    {
+        var text = _session.Mt32Lcd;
+        if (text is null)
+            return; // MT-32 synth not active for this game
+
+        if (_lcdWindow is null)
+        {
+            _lcdWindow = new Mt32LcdWindow { Owner = this };
+            _lcdWindow.Show();
+            _lcdWindow.Left = Left + Math.Max(0, (ActualWidth - _lcdWindow.ActualWidth) / 2);
+            _lcdWindow.Top = Top + Math.Max(0, ActualHeight - _lcdWindow.ActualHeight - 28);
+        }
+
+        _lcdWindow.SetText(text);
     }
 
     public IInputSource Input => this;
@@ -374,6 +400,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        _lcdTimer?.Stop();
+        _lcdWindow?.Close();
         _session.Stop();
         _session.Dispose();
         _audioOut?.Stop();

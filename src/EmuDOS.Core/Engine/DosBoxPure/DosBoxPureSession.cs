@@ -108,10 +108,28 @@ public sealed class DosBoxPureSession : IDosSession
 
             _core.Video = (data, w, h, pitch, fmt) =>
                 _host.SubmitVideoFrame(new VideoFrame(data, w, h, pitch, fmt));
-            _core.Audio = _host.SubmitAudioFrames;
             _core.InputPoll = PollInput;
             _core.Input = QueryInput;
-            _core.MidiByte = _midi.Feed;
+
+            // MT-32: when the profile selects it and the ROMs are present, drive our own synth
+            // (the core routes MIDI to us via "frontend"), mixing its audio with the core's.
+            if (_instance.Profile.Sound.Midi == MidiDevice.Mt32)
+                _synth = Audio.Mt32Synth.TryCreate(
+                    Path.Combine(_systemDir, "MT32_CONTROL.ROM"),
+                    Path.Combine(_systemDir, "MT32_PCM.ROM"));
+
+            if (_synth is not null)
+            {
+                _core.Audio = MixMt32;
+                _core.MidiByte = _synth.FeedByte;
+                if (Environment.GetEnvironmentVariable("EMUDOS_MT32_TEST") == "1")
+                    _synth.PlayTestTone();
+            }
+            else
+            {
+                _core.Audio = _host.SubmitAudioFrames;
+                _core.MidiByte = _midi.Feed;
+            }
 
             _core.SetCallbacks();
             _core.Init();
@@ -136,6 +154,8 @@ public sealed class DosBoxPureSession : IDosSession
             DrainPending();
             _core?.Dispose();
             _core = null;
+            _synth?.Dispose();
+            _synth = null;
             if (_state != EngineState.Faulted)
                 SetState(EngineState.Stopped);
         }
@@ -219,12 +239,35 @@ public sealed class DosBoxPureSession : IDosSession
     }
 
     private readonly Audio.MidiMonitor _midi = new();
+    private Audio.Mt32Synth? _synth;
+    private short[] _mt32Buf = [];
     private long _kbQueries, _kbHits, _padQueries, _mouseQueries, _otherQueries, _keysSent;
+
+    /// <summary>The MT-32 LCD text when our synth is active; null otherwise.</summary>
+    public string? Mt32Lcd => _synth?.Lcd;
+
+    // Render our MT-32 music and mix it into the core's audio, then forward to the host. Runs on
+    // the engine thread, same as FeedByte — so the synth is touched single-threaded.
+    private void MixMt32(ReadOnlySpan<short> core)
+    {
+        int n = core.Length;
+        if (_mt32Buf.Length < n)
+            _mt32Buf = new short[n];
+
+        _synth!.Render(_mt32Buf, n / 2);
+        for (int i = 0; i < n; i++)
+        {
+            int s = core[i] + _mt32Buf[i];
+            _mt32Buf[i] = (short)(s > 32767 ? 32767 : s < -32768 ? -32768 : s);
+        }
+
+        _host.SubmitAudioFrames(_mt32Buf.AsSpan(0, n));
+    }
 
     public string InputDiagnostics =>
         $"keysSent={Interlocked.Read(ref _keysSent)} kbQ={Interlocked.Read(ref _kbQueries)} "
         + $"padQ={Interlocked.Read(ref _padQueries)} mouseQ={Interlocked.Read(ref _mouseQueries)} "
-        + $"otherQ={Interlocked.Read(ref _otherQueries)} | midiBytes={_midi.ByteCount} lcd='{_midi.Lcd}'";
+        + $"otherQ={Interlocked.Read(ref _otherQueries)} | midiBytes={_synth?.BytesFed ?? _midi.ByteCount} lcd='{_synth?.Lcd ?? _midi.Lcd}' synth={(_synth is null ? "off" : _synth.SampleRate + "Hz")}";
 
     private short QueryInput(uint port, uint device, uint index, uint id)
     {

@@ -38,4 +38,7 @@ public interface IDosSession : IDisposable
 
     /// <summary>Diagnostic snapshot of input polling (which devices the core queried). For debugging.</summary>
     string InputDiagnostics => string.Empty;
+
+    /// <summary>The MT-32 LCD text when our synth is driving MIDI; null when it isn't active.</summary>
+    string? Mt32Lcd => null;
 }
