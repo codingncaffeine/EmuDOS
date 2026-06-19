@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DarkChrome.Apply(this);
     }
 
     private MainViewModel? Vm => DataContext as MainViewModel;

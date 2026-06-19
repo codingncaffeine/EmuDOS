@@ -28,6 +28,7 @@ public partial class PreferencesWindow : Window
     public PreferencesWindow(AppServices services, GameTile? game = null)
     {
         InitializeComponent();
+        DarkChrome.Apply(this);
         _services = services;
         _game = game;
 

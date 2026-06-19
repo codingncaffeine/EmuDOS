@@ -2,67 +2,70 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="EmuDOS Preferences" Height="560" Width="580"
-        Background="#1F1A16" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgPrimary}" WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize" MinHeight="420" MinWidth="480">
 
     <Window.Resources>
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#2C2520"/>
-            <Setter Property="Foreground" Value="#E8DCC8"/>
-            <Setter Property="BorderBrush" Value="#473C32"/>
-            <Setter Property="Padding" Value="6,5"/>
-        </Style>
         <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#C8B89C"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
             <Setter Property="Margin" Value="0,12,0,3"/>
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
     </Window.Resources>
 
-    <TabControl x:Name="Tabs" Background="#1F1A16" BorderThickness="0" Padding="0">
+    <TabControl x:Name="Tabs" Background="{StaticResource BgPrimary}" BorderThickness="0" Padding="0">
         <TabItem x:Name="GameOptionsTab" Header="Game Options">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="22,18">
-                    <TextBlock x:Name="GameTitle" FontSize="16" FontWeight="SemiBold" Foreground="#E8DCC8"/>
-                    <TextBlock Foreground="#A89A86" Margin="0,2,0,6" TextWrapping="Wrap"
+                    <TextBlock x:Name="GameTitle" Style="{StaticResource Heading}"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,6"
                                Text="Saved for this game only — overrides the catalog defaults and survives catalog updates."/>
 
                     <TextBlock Text="CPU speed" Style="{StaticResource FieldLabel}"/>
                     <StackPanel Orientation="Horizontal">
-                        <ComboBox x:Name="CpuCyclesMode" Width="150" SelectionChanged="OnCyclesModeChanged"/>
+                        <ComboBox x:Name="CpuCyclesMode" Width="150" Foreground="{StaticResource TextPrimary}" SelectionChanged="OnCyclesModeChanged"/>
                         <TextBox x:Name="FixedCycles" Width="90" Margin="10,0,0,0"/>
-                        <TextBlock x:Name="CyclesHint" Foreground="#A89A86" VerticalAlignment="Center" Margin="8,0,0,0"
+                        <TextBlock x:Name="CyclesHint" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="8,0,0,0"
                                    Text="cycles (lower if a game runs too fast)"/>
                     </StackPanel>
 
                     <TextBlock Text="Machine / graphics" Style="{StaticResource FieldLabel}"/>
-                    <ComboBox x:Name="MachineTypeBox" Width="200" HorizontalAlignment="Left"/>
+                    <ComboBox x:Name="MachineTypeBox" Width="200" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}"/>
 
                     <TextBlock Text="Memory (MB)" Style="{StaticResource FieldLabel}"/>
-                    <ComboBox x:Name="MemoryBox" Width="120" HorizontalAlignment="Left"/>
+                    <ComboBox x:Name="MemoryBox" Width="120" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}"/>
 
                     <TextBlock Text="Sound card" Style="{StaticResource FieldLabel}"/>
-                    <ComboBox x:Name="SoundCardBox" Width="200" HorizontalAlignment="Left"/>
+                    <ComboBox x:Name="SoundCardBox" Width="200" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}"/>
 
                     <TextBlock Text="MIDI music" Style="{StaticResource FieldLabel}"/>
-                    <ComboBox x:Name="MidiBox" Width="200" HorizontalAlignment="Left"/>
+                    <ComboBox x:Name="MidiBox" Width="200" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}"/>
 
-                    <CheckBox x:Name="AspectBox" Content="Correct aspect ratio" Foreground="#C8B89C" Margin="0,16,0,0"/>
+                    <CheckBox x:Name="AspectBox" Content="Correct aspect ratio" Margin="0,16,0,0"/>
 
-                    <TextBlock Text="Display (EmuDOS)" FontWeight="SemiBold" Foreground="#C8B89C" Margin="0,18,0,2"/>
-                    <TextBlock Foreground="#A89A86" Margin="0,0,0,6" TextWrapping="Wrap"
+                    <TextBlock Text="Display (EmuDOS)" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}" Margin="0,18,0,2"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
                                Text="Applied by EmuDOS to the picture — the core has no brightness/gamma. Raise gamma to lift a too-dark game."/>
 
                     <DockPanel Margin="0,4,0,0">
-                        <TextBlock DockPanel.Dock="Left" Text="Brightness" Width="80" Foreground="#C8B89C" VerticalAlignment="Center"/>
-                        <TextBlock DockPanel.Dock="Right" x:Name="BrightnessValue" Width="44" Foreground="#A89A86"
+                        <TextBlock DockPanel.Dock="Left" Text="Brightness" Width="80" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" x:Name="BrightnessValue" Width="44" Foreground="{StaticResource TextSecondary}"
                                    VerticalAlignment="Center" TextAlignment="Right"/>
                         <Slider x:Name="BrightnessSlider" Minimum="0.5" Maximum="1.5" Value="1"
                                 SmallChange="0.05" LargeChange="0.1" VerticalAlignment="Center"
                                 ValueChanged="OnDisplaySliderChanged"/>
                     </DockPanel>
                     <DockPanel Margin="0,8,0,0">
-                        <TextBlock DockPanel.Dock="Left" Text="Gamma" Width="80" Foreground="#C8B89C" VerticalAlignment="Center"/>
-                        <TextBlock DockPanel.Dock="Right" x:Name="GammaValue" Width="44" Foreground="#A89A86"
+                        <TextBlock DockPanel.Dock="Left" Text="Gamma" Width="80" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" x:Name="GammaValue" Width="44" Foreground="{StaticResource TextSecondary}"
                                    VerticalAlignment="Center" TextAlignment="Right"/>
                         <Slider x:Name="GammaSlider" Minimum="0.5" Maximum="2.0" Value="1"
                                 SmallChange="0.05" LargeChange="0.1" VerticalAlignment="Center"
@@ -70,8 +73,8 @@
                     </DockPanel>
 
                     <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
-                        <Button Content="Save" Padding="20,6" Click="OnSaveGameOptions"/>
-                        <Button Content="Reset to catalog default" Padding="14,6" Margin="10,0,0,0" Click="OnResetGameOptions"/>
+                        <Button Content="Save" Click="OnSaveGameOptions"/>
+                        <Button Content="Reset to catalog default" Margin="10,0,0,0" Click="OnResetGameOptions"/>
                         <TextBlock x:Name="GameOptionsStatus" Foreground="#9FE0A0" VerticalAlignment="Center" Margin="14,0,0,0"/>
                     </StackPanel>
                 </StackPanel>
@@ -81,36 +84,34 @@
         <TabItem Header="Snaps">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="22,18">
-                    <TextBlock Text="ScreenScraper" FontSize="16" FontWeight="SemiBold"
-                               Foreground="#E8DCC8" Margin="0,0,0,4"/>
-                    <TextBlock TextWrapping="Wrap" Foreground="#A89A86" Margin="0,0,0,10"
+                    <TextBlock Text="ScreenScraper" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
                                Text="Log in with your screenscraper.fr account for higher box-art download limits. (Optional — basic art works without it.)"/>
 
-                    <TextBlock Text="Username" Foreground="#C8B89C" Margin="0,2,0,3"/>
+                    <TextBlock Text="Username" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="SsUser"/>
 
-                    <TextBlock Text="Password" Foreground="#C8B89C" Margin="0,10,0,3"/>
-                    <PasswordBox x:Name="SsPass" Padding="6,5" Background="#2C2520"
-                                 Foreground="#E8DCC8" BorderBrush="#473C32"/>
+                    <TextBlock Text="Password" Style="{StaticResource FieldLabel}"/>
+                    <PasswordBox x:Name="SsPass" Padding="6,5" Background="{StaticResource BgTertiary}"
+                                 Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderNormal}"/>
 
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                        <Button x:Name="SsLogin" Content="Log in" Padding="18,5" Click="OnLoginScreenScraper"/>
-                        <TextBlock x:Name="SsStatus" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="#A89A86"/>
+                        <Button x:Name="SsLogin" Content="Log in" Click="OnLoginScreenScraper"/>
+                        <TextBlock x:Name="SsStatus" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="{StaticResource TextSecondary}"/>
                     </StackPanel>
 
-                    <Separator Margin="0,22" Background="#3A2F27"/>
+                    <Separator Margin="0,22" Background="{StaticResource BorderNormal}"/>
 
-                    <TextBlock Text="SteamGridDB" FontSize="16" FontWeight="SemiBold"
-                               Foreground="#E8DCC8" Margin="0,0,0,4"/>
-                    <TextBlock TextWrapping="Wrap" Foreground="#A89A86" Margin="0,0,0,10"
+                    <TextBlock Text="SteamGridDB" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
                                Text="Paste your API key from steamgriddb.com — used as a fallback art source for games ScreenScraper doesn't have."/>
 
-                    <TextBlock Text="API Key" Foreground="#C8B89C" Margin="0,2,0,3"/>
+                    <TextBlock Text="API Key" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="SgdbKey"/>
 
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                        <Button x:Name="SgdbLogin" Content="Log in" Padding="18,5" Click="OnLoginSteamGridDb"/>
-                        <TextBlock x:Name="SgdbStatus" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="#A89A86"/>
+                        <Button x:Name="SgdbLogin" Content="Log in" Click="OnLoginSteamGridDb"/>
+                        <TextBlock x:Name="SgdbStatus" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="{StaticResource TextSecondary}"/>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

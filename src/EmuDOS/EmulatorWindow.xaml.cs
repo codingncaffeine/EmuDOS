@@ -58,6 +58,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     public EmulatorWindow(IDosEngine engine, GameInstance instance)
     {
         InitializeComponent();
+        DarkChrome.Apply(this);
         Title = $"EmuDOS — {instance.Profile.Title}";
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");

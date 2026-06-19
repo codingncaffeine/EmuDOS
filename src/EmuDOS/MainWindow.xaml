@@ -9,7 +9,7 @@
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         Title="EmuDOS" Height="840" Width="1458"
         MinWidth="1458" MaxWidth="1458"
-        Background="#1A1411" WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgPrimary}" WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver"
         PreviewKeyDown="OnWindowKeyDown">
 
@@ -79,10 +79,10 @@
         </ScrollViewer>
 
         <!-- Status: hidden unless importing / downloading / a problem. -->
-        <Border Grid.Row="1" Background="#2A211B"
+        <Border Grid.Row="1" Background="{StaticResource BgSecondary}"
                 Visibility="{Binding ShowStatus, Converter={StaticResource BoolToVisibility}}">
             <Grid Margin="14,6">
-                <TextBlock Text="{Binding Status}" Foreground="#C8B89C" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
                 <ProgressBar Width="120" Height="6" IsIndeterminate="True"
                              HorizontalAlignment="Right"
                              Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}"/>
