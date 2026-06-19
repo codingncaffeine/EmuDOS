@@ -20,6 +20,7 @@
     <Grid>
         <Grid.ContextMenu>
             <ContextMenu>
+                <MenuItem Header="Download missing art" Click="OnDownloadMissingArt"/>
                 <MenuItem Header="Preferences…" Click="OnPreferences"/>
             </ContextMenu>
         </Grid.ContextMenu>

@@ -36,6 +36,12 @@ public partial class MainWindow : Window
         new PreferencesWindow(services) { Owner = this }.ShowDialog();
     }
 
+    private async void OnDownloadMissingArt(object sender, RoutedEventArgs e)
+    {
+        if (Vm is not null)
+            await Vm.FetchMissingArtAsync();
+    }
+
     private void OnBoxRightClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: GameTile tile } element)
@@ -49,11 +55,15 @@ public partial class MainWindow : Window
         var openInDos = new MenuItem { Header = "Open in DOS" };
         openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
 
+        var boxArt = new MenuItem { Header = "Download box art" };
+        boxArt.Click += async (_, _) => await (Vm?.DownloadArtAsync(tile) ?? Task.CompletedTask);
+
         var manual = new MenuItem { Header = "Download manual" };
         manual.Click += async (_, _) => await DownloadManualAsync(tile);
 
         menu.Items.Add(preferences);
         menu.Items.Add(openInDos);
+        menu.Items.Add(boxArt);
         menu.Items.Add(manual);
 
         // A "Run" submenu of executables we've used before plus any found in the content, so the

@@ -16,10 +16,9 @@
     <Resource Include="..\..\Assets\bookshelf2.png" Link="Assets\bookshelf2.png" />
   </ItemGroup>
 
-  <!-- MT-32 LCD assets: the Roland unit photo + (legacy) DotGothic16 font. -->
+  <!-- MT-32 LCD: the Roland unit photo (the dots are rendered by Mt32LcdControl). -->
   <ItemGroup>
     <Resource Include="Assets\roland.png" />
-    <Resource Include="Assets\Fonts\DotGothic16-Regular.ttf" />
   </ItemGroup>
 
   <!-- Our MT-32 synth shim (LGPL munt; source under src/native/mt32). Ships next to the exe. -->

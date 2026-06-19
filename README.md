@@ -64,7 +64,6 @@ EmuDOS stands on the work of others, with thanks:
 
 - **DOSBox Pure** (libretro core) — GPLv2; downloaded at runtime, never bundled.
 - **munt / mt32emu** — LGPL 2.1; compiled into our `emudos_mt32.dll` (source under `src/native/mt32`, rebuildable via `build.cmd`).
-- **DotGothic16** font — SIL Open Font License.
 - Box art / manuals come from **ScreenScraper**, **SteamGridDB**, and the **Internet Archive** via their APIs.
 
 ## Building the MT-32 shim (optional)

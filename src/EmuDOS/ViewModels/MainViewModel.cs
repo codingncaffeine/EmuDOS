@@ -195,11 +195,38 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Fetch box covers for any games missing one, updating each tile as it arrives.</summary>
+    /// <summary>Re-fetch box art for a single game (overwrites only on success).</summary>
+    public async Task DownloadArtAsync(GameTile tile)
+    {
+        Report($"Fetching art for {tile.Title}…", busy: true);
+        try
+        {
+            var path = await _services.Art.FetchBoxFrontAsync(tile.Title, tile.MediaDir);
+            if (path is not null)
+            {
+                tile.LoadCover();
+                _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath);
+                Report($"Art updated for {tile.Title}.", busy: false);
+            }
+            else
+            {
+                Report($"No art found for {tile.Title}.", busy: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Report($"Art fetch failed: {ex.Message}", busy: false);
+        }
+    }
+
     public async Task FetchMissingArtAsync()
     {
         var pending = Games.Where(t => t.Cover is null).ToList();
         if (pending.Count == 0)
+        {
+            Report("All games have art.", busy: false);
             return;
+        }
 
         foreach (var tile in pending)
         {
