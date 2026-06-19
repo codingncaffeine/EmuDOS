@@ -422,7 +422,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _audioBuffer = null;
     }
 
-    // Persist the window size and the executable that ran, so next launch restores both.
+    // Persist the window size so next launch restores it. (The remembered executable is set only
+    // by an explicit Run-menu choice, so a plain launch never overwrites it here.)
     private void SaveGameState()
     {
         try
@@ -437,7 +438,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
                 WindowWidth = (int)size.Width,
                 WindowHeight = (int)size.Height,
             };
-            store.WriteState(_instance.GameboxPath, state.WithExecutable(_instance.Profile.Launch.Executable));
+            store.WriteState(_instance.GameboxPath, state);
         }
         catch
         {

@@ -80,6 +80,13 @@ public partial class MainWindow : Window
 
     private static readonly string[] ExecutableExtensions = [".exe", ".com", ".bat"];
 
+    /// <summary>A configuration/installer program, not the game — shouldn't become the default launch.</summary>
+    private static bool IsSetupLike(string executable)
+    {
+        var name = Path.GetFileNameWithoutExtension(executable).ToLowerInvariant();
+        return name.Contains("setup") || name.Contains("install") || name.Contains("config");
+    }
+
     /// <summary>DOS-relative paths of runnable files under the content (minus the DOSBox wrapper).</summary>
     private static List<string> ScanExecutables(string contentDir)
     {
@@ -402,18 +409,24 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Pick the executable: an explicit choice from the Run menu wins; otherwise use the
-            // configured one, falling back to whatever ran successfully last time (Boxer-style).
+            // Pick the executable: an explicit Run-menu choice wins; otherwise the one the user
+            // last chose for this game (the running tally), falling back to the configured default.
+            // The remembered choice beats the configured exe so a bad guess (e.g. a DOS extender)
+            // doesn't keep stranding the user once they've found the real launcher.
+            var state = services.Store.ReadState(tile.Game.GameboxPath);
             var configured = instance.Profile.Launch.Executable;
             var chosen = executableOverride
-                ?? (string.IsNullOrWhiteSpace(configured)
-                        ? services.Store.ReadState(tile.Game.GameboxPath).LastExecutable
-                        : configured);
+                ?? (string.IsNullOrWhiteSpace(state.LastExecutable) ? configured : state.LastExecutable);
             if (!string.Equals(chosen, configured, StringComparison.OrdinalIgnoreCase))
                 instance = instance with
                 {
                     Profile = instance.Profile with { Launch = instance.Profile.Launch with { Executable = chosen } },
                 };
+
+            // Only an explicit Run-menu pick becomes the new default — and not a one-off setup
+            // program, so "go tweak SETUP.EXE" doesn't replace the game as the normal launch.
+            if (executableOverride is not null && !IsSetupLike(executableOverride))
+                services.Store.WriteState(tile.Game.GameboxPath, state.WithExecutable(executableOverride));
         }
 
         var engine = new DosBoxPureEngine(
