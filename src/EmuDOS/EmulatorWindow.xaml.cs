@@ -43,8 +43,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly object _inputLock = new();
     private readonly HashSet<DosKey> _keysDown = [];
     private readonly System.Collections.Concurrent.ConcurrentQueue<KeyEvent> _keyEvents = new();
-    private int _mouseDx;
-    private int _mouseDy;
+    // Accumulate fractional movement so slow, precise moves aren't truncated to zero; the integer
+    // part is sent each poll and the remainder carried. Scaled to physical pixels (× DPI) and a
+    // sensitivity factor so the in-game cursor keeps pace with the real one at any window size.
+    private const double MouseSensitivity = 1.5;
+    private double _mouseAccumX;
+    private double _mouseAccumY;
+    private double _mouseScale = MouseSensitivity;
     private bool _mouseLeft;
     private bool _mouseRight;
     private bool _mouseMiddle;
@@ -65,6 +70,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private void OnLoadedGrabFocus(object sender, RoutedEventArgs e)
     {
         _session.Start();
+        _mouseScale = VisualTreeHelper.GetDpi(this).DpiScaleX * MouseSensitivity;
         Dispatcher.BeginInvoke(() =>
         {
             Activate();
@@ -235,10 +241,11 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         lock (_inputLock)
         {
-            var delta = new MouseDelta(_mouseDx, _mouseDy, _mouseLeft, _mouseRight, _mouseMiddle);
-            _mouseDx = 0;
-            _mouseDy = 0;
-            return delta;
+            int dx = (int)_mouseAccumX;
+            int dy = (int)_mouseAccumY;
+            _mouseAccumX -= dx; // carry the sub-pixel remainder
+            _mouseAccumY -= dy;
+            return new MouseDelta(dx, dy, _mouseLeft, _mouseRight, _mouseMiddle);
         }
     }
 
@@ -293,8 +300,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         {
             lock (_inputLock)
             {
-                _mouseDx += (int)(pos.X - last.X);
-                _mouseDy += (int)(pos.Y - last.Y);
+                _mouseAccumX += (pos.X - last.X) * _mouseScale;
+                _mouseAccumY += (pos.Y - last.Y) * _mouseScale;
             }
         }
 

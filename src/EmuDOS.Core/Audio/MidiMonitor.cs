@@ -36,6 +36,9 @@ public sealed class MidiMonitor
         if (!_inSysex)
             return;
 
+        if (value >= 0xF8)
+            return; // system realtime bytes (clock/active-sensing) may interleave a SysEx — ignore
+
         _sysex.Add(value);
         if (value == 0xF7) // SysEx end
         {

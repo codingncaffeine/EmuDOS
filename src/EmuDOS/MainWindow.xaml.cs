@@ -1,6 +1,8 @@
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using EmuDOS.Controls;
@@ -33,12 +35,27 @@ public partial class MainWindow : Window
 
     private void OnBoxRightClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: GameTile tile })
-        {
-            var services = ((App)Application.Current).Services;
-            new PreferencesWindow(services, tile) { Owner = this }.ShowDialog();
-            e.Handled = true;
-        }
+        if (sender is not FrameworkElement { DataContext: GameTile tile } element)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = element, Placement = PlacementMode.MousePoint };
+
+        var preferences = new MenuItem { Header = "Preferences" };
+        preferences.Click += (_, _) => OpenOptions(tile);
+
+        var openInDos = new MenuItem { Header = "Open in DOS" };
+        openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
+
+        menu.Items.Add(preferences);
+        menu.Items.Add(openInDos);
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void OpenOptions(GameTile tile)
+    {
+        var services = ((App)Application.Current).Services;
+        new PreferencesWindow(services, tile) { Owner = this }.ShowDialog();
     }
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
@@ -261,7 +278,7 @@ public partial class MainWindow : Window
             await LaunchGameAsync(Vm.Games[0]);
     }
 
-    private async Task LaunchGameAsync(GameTile tile)
+    private async Task LaunchGameAsync(GameTile tile, bool bootToDos = false)
     {
         if (Vm is null)
             return;
@@ -281,6 +298,13 @@ public partial class MainWindow : Window
         }
 
         var instance = services.Store.Resolve(tile.Game.GameboxPath);
+        if (bootToDos)
+        {
+            // No game launch — just configure + drop to the C: prompt (content is mounted as C:)
+            // so the user can browse files and run the game's SETUP (e.g. to choose Roland MT-32).
+            instance = instance with { Profile = instance.Profile with { Launch = new Core.Model.LaunchSpec() } };
+        }
+
         var engine = new DosBoxPureEngine(
             services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir);
         services.Library.RecordPlay(tile.Id);
