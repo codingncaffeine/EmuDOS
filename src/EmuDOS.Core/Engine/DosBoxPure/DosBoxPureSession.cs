@@ -108,14 +108,24 @@ public sealed class DosBoxPureSession : IDosSession
             string loadTarget;
             if (_instance.Profile.SourceMedia == SourceMediaType.Iso)
             {
-                // The dosbox_pure way for CD games: load the disc image itself as content. The core
-                // mounts it as the CD (D:) and provides a save-backed writable C: for the install —
-                // far simpler and more robust than fighting IMGMOUNT against its union C: drive.
-                loadTarget = Directory.EnumerateFiles(_instance.ContentPath)
+                // Load the disc via an .m3u8 playlist: dosbox_pure then mounts a CD image as D:
+                // (a CD loaded directly becomes the C: boot drive instead). A CD on D: is what makes
+                // the core detect a bootable disc and leaves C: free/writable — so the start menu
+                // offers "[Boot and Install New Operating System]" and the install has somewhere to go.
+                var disc = Directory.EnumerateFiles(_instance.ContentPath)
                     .FirstOrDefault(f => f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
                                       || f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)
-                                      || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase))
-                    ?? _instance.ContentPath;
+                                      || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase));
+                if (disc is not null)
+                {
+                    var m3u = Path.Combine(_instance.ContentPath, "emudos.m3u8");
+                    File.WriteAllText(m3u, Path.GetFileName(disc) + "\n");
+                    loadTarget = m3u;
+                }
+                else
+                {
+                    loadTarget = _instance.ContentPath;
+                }
             }
             else
             {
