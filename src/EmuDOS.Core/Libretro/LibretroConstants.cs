@@ -18,6 +18,7 @@ internal static class LibretroConstants
     public const uint EnvSetSupportNoGame = 18;
     public const uint EnvGetLogInterface = 27;
     public const uint EnvGetSaveDirectory = 31;
+    public const uint EnvGetVfsInterface = 45 | 0x10000; // 45 | RETRO_ENVIRONMENT_EXPERIMENTAL
     public const uint EnvGetMidiInterface = 48 | 0x10000; // 48 | RETRO_ENVIRONMENT_EXPERIMENTAL
     public const uint EnvGetCoreOptionsVersion = 52;
     public const uint EnvSetCoreOptions = 53;

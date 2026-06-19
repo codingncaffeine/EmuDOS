@@ -42,6 +42,7 @@ public sealed class LibretroCore : IDisposable
     private readonly RetroMidiWrite _midiWrite;
     private readonly RetroMidiFlush _midiFlush;
     private readonly RetroLogPrintf _logPrintf;
+    private readonly LibretroVfs _vfs = new();
 
     private readonly RetroInit _init;
     private readonly RetroDeinit _deinit;
@@ -329,6 +330,16 @@ public sealed class LibretroCore : IDisposable
                 Marshal.WriteIntPtr(data, GetCachedAnsi(SaveDirectory));
                 return true;
 
+            case EnvGetVfsInterface:
+                // struct retro_vfs_interface_info { uint32_t required_interface_version; retro_vfs_interface* iface; }
+                // We provide v3; the pointer is 8-byte aligned (offset = nint.Size) on x64.
+                if (data != 0)
+                {
+                    Marshal.WriteInt32(data, 0, 3);
+                    Marshal.WriteIntPtr(data, nint.Size, _vfs.Interface);
+                }
+                return true;
+
             case EnvGetLogInterface:
                 if (data != 0)
                     Marshal.WriteIntPtr(data, Marshal.GetFunctionPointerForDelegate(_logPrintf));
@@ -466,6 +477,8 @@ public sealed class LibretroCore : IDisposable
         foreach (var ptr in _ansiCache.Values)
             Marshal.FreeHGlobal(ptr);
         _ansiCache.Clear();
+
+        _vfs.Dispose();
 
         if (_gamePathPtr != 0)
         {
