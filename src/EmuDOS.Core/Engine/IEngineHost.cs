@@ -15,6 +15,12 @@ public interface IEngineHost
     void SubmitVideoFrame(in VideoFrame frame);
 
     /// <summary>
+    /// Called once after the game loads with the core's audio sample rate (Hz), so the host
+    /// can set up its audio output before frames start arriving.
+    /// </summary>
+    void SetAudioSampleRate(int sampleRate);
+
+    /// <summary>
     /// Interleaved stereo 16-bit PCM (L, R, L, R, …) produced since the last call.
     /// </summary>
     void SubmitAudioFrames(ReadOnlySpan<short> interleavedStereo);

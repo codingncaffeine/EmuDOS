@@ -4,7 +4,7 @@
         Title="EmuDOS" Width="800" Height="640"
         Background="Black" WindowStartupLocation="CenterScreen"
         Focusable="True"
-        KeyDown="OnKeyDown" KeyUp="OnKeyUp"
+        PreviewKeyDown="OnKeyDown" PreviewKeyUp="OnKeyUp"
         MouseMove="OnMouseMove" MouseDown="OnMouseButton" MouseUp="OnMouseButton"
         Closing="OnClosing">
     <Image x:Name="Screen" Stretch="Uniform"

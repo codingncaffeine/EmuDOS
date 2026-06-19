@@ -59,9 +59,10 @@ public sealed class CatalogDatabase
             {
                 ins.Transaction = tx;
                 ins.CommandText =
-                    "INSERT INTO CatalogEntries (Id, Title, ProfileJson) VALUES ($id, $title, $json);";
+                    "INSERT OR REPLACE INTO CatalogEntries (Id, Title, NormalizedTitle, ProfileJson) VALUES ($id, $title, $ntitle, $json);";
                 ins.Parameters.AddWithValue("$id", entry.Id);
                 ins.Parameters.AddWithValue("$title", entry.Title);
+                ins.Parameters.AddWithValue("$ntitle", NormalizeTitle(entry.Title));
                 ins.Parameters.AddWithValue("$json", JsonSerializer.Serialize(entry.Profile, JsonOptions));
                 ins.ExecuteNonQuery();
             }
@@ -134,6 +135,59 @@ public sealed class CatalogDatabase
         return entryId is null ? null : LoadProfile(connection, entryId);
     }
 
+    /// <summary>
+    /// Curated profile for a game title (normalized), or null. The fallback when content/telltale
+    /// matching can't identify the game — eXoDOS launches most games via a run.bat we can't see,
+    /// so the title is the reliable key.
+    /// </summary>
+    public GameProfile? MatchByTitle(string title)
+    {
+        var key = NormalizeTitle(title);
+        if (key.Length == 0)
+            return null;
+
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT ProfileJson FROM CatalogEntries WHERE NormalizedTitle = $t LIMIT 1;";
+        cmd.Parameters.AddWithValue("$t", key);
+        return cmd.ExecuteScalar() is string json
+            ? JsonSerializer.Deserialize<GameProfile>(json, JsonOptions)
+            : null;
+    }
+
+    /// <summary>
+    /// Collapse a title to a comparison key: lowercase, drop year/articles/punctuation, and turn
+    /// multi-letter roman numerals into digits so "DOOM II" and "Doom 2" land on the same key.
+    /// </summary>
+    public static string NormalizeTitle(string title)
+    {
+        var s = (title ?? string.Empty).ToLowerInvariant();
+        s = YearRegex.Replace(s, " ");
+        s = RomanRegex.Replace(s, m => RomanToArabic(m.Value));
+        s = ArticleRegex.Replace(s, " ");
+        return NonAlnumRegex.Replace(s, string.Empty);
+    }
+
+    private static string RomanToArabic(string roman) => roman switch
+    {
+        "ii" => "2", "iii" => "3", "iv" => "4", "vi" => "6", "vii" => "7",
+        "viii" => "8", "ix" => "9", "xi" => "11", "xii" => "12", "xiii" => "13",
+        _ => roman,
+    };
+
+    private static readonly System.Text.RegularExpressions.Regex YearRegex =
+        new(@"\(?\b(19|20)\d{2}\b\)?", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // Multi-letter romans only — single i/v/x are too ambiguous (e.g. "Mega Man X").
+    private static readonly System.Text.RegularExpressions.Regex RomanRegex =
+        new(@"\b(xiii|xii|xi|viii|vii|vi|ix|iv|iii|ii)\b", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex ArticleRegex =
+        new(@"\b(the|a|an)\b", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex NonAlnumRegex =
+        new(@"[^a-z0-9]+", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private static GameProfile? LoadProfile(SqliteConnection connection, string entryId)
     {
         using var cmd = connection.CreateCommand();
@@ -164,9 +218,10 @@ public sealed class CatalogDatabase
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             CREATE TABLE CatalogEntries (
-                Id          TEXT PRIMARY KEY,
-                Title       TEXT NOT NULL,
-                ProfileJson TEXT NOT NULL
+                Id              TEXT PRIMARY KEY,
+                Title           TEXT NOT NULL,
+                NormalizedTitle TEXT NOT NULL,
+                ProfileJson     TEXT NOT NULL
             );
 
             CREATE TABLE Telltales (
@@ -176,12 +231,15 @@ public sealed class CatalogDatabase
             );
 
             CREATE INDEX idx_telltale_file ON Telltales(FileName);
+            CREATE INDEX idx_catalog_title ON CatalogEntries(NormalizedTitle);
 
             PRAGMA user_version = 1;
             """;
         cmd.ExecuteNonQuery();
     }
 
+    // Match by executable BASENAME (no extension): eXoDOS configs only know the exe name
+    // (e.g. "bonde"), not whether the user's copy has BONDE.EXE or BONDE.COM.
     private static string Normalize(string fileName) =>
-        Path.GetFileName(fileName).Trim().ToLowerInvariant();
+        Path.GetFileNameWithoutExtension(fileName).Trim().ToLowerInvariant();
 }

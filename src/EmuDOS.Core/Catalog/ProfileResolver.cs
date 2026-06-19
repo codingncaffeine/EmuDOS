@@ -21,7 +21,9 @@ public sealed class ProfileResolver(CatalogDatabase catalog)
         if (baseline.Origin == ProfileOrigin.UserOverride)
             return baseline;
 
-        var curated = catalog.Match(contentFileNames);
+        // Prefer a content/telltale match; fall back to the game's title (how eXoDOS entries
+        // are usually keyed, since their launch exe is hidden behind a run.bat).
+        var curated = catalog.Match(contentFileNames) ?? catalog.MatchByTitle(baseline.Title);
         if (curated is null)
             return baseline;
 

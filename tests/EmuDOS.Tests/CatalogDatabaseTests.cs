@@ -22,9 +22,9 @@ public class CatalogDatabaseTests
     public void Requires_every_telltale_to_be_present()
     {
         var db = NewCatalog();
-        db.Build([Entry("doom", "Doom", ["doom.exe", "doom.wad"], 20000)]);
+        db.Build([Entry("doom", "Doom", ["doom.exe", "doomdata.dat"], 20000)]);
 
-        Assert.Null(db.Match(["doom.exe"])); // doom.wad missing
+        Assert.Null(db.Match(["doom.exe"])); // doomdata missing
     }
 
     [Fact]
@@ -60,6 +60,24 @@ public class CatalogDatabaseTests
         Assert.Null(db.Match(["a.exe"]));
         Assert.NotNull(db.Match(["c.exe"]));
     }
+
+    [Fact]
+    public void Matches_by_normalized_title_when_telltales_are_absent()
+    {
+        var db = NewCatalog();
+        db.Build([Entry("doom", "DOOM", [], 20000)]);
+
+        Assert.NotNull(db.MatchByTitle("Doom"));
+        Assert.NotNull(db.MatchByTitle("doom (1993)"));
+        Assert.Null(db.MatchByTitle("Heretic"));
+    }
+
+    [Theory]
+    [InlineData("DOOM II", "Doom 2")]
+    [InlineData("Wing Commander II (1991)", "wing commander 2")]
+    [InlineData("The Secret of Monkey Island", "Secret of Monkey Island")]
+    public void Title_normalization_collapses_variants(string a, string b) =>
+        Assert.Equal(CatalogDatabase.NormalizeTitle(a), CatalogDatabase.NormalizeTitle(b));
 
     private static CatalogDatabase NewCatalog() =>
         new(Path.Combine(Path.GetTempPath(), "emudos-tests", Guid.NewGuid().ToString("N"), "catalog.db"));

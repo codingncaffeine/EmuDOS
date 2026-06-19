@@ -121,7 +121,9 @@ public sealed class DosBoxPureSession : IDosSession
                 return;
             }
 
-            PumpFrames(_core.GetAvInfo());
+            var avInfo = _core.GetAvInfo();
+            _host.SetAudioSampleRate((int)Math.Round(avInfo.SampleRate > 1 ? avInfo.SampleRate : 48000));
+            PumpFrames(avInfo);
         }
         catch (Exception ex)
         {

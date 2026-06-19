@@ -3,11 +3,14 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using EmuDOS.Core.Engine;
 using EmuDOS.Core.Engine.DosBoxPure;
+using EmuDOS.Core.Infrastructure;
 using EmuDOS.Core.Input;
 using EmuDOS.Core.Model;
 using EmuDOS.Input;
+using NAudio.Wave;
 using CorePixelFormat = EmuDOS.Core.Engine.PixelFormat;
 
 namespace EmuDOS;
@@ -28,6 +31,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private WriteableBitmap? _bitmap;
     private int _renderQueued;
 
+    private WaveOutEvent? _audioOut;
+    private BufferedWaveProvider? _audioBuffer;
+    private byte[] _audioBytes = [];
+    private int _audioBatches;
+
+    private readonly AppLog _log;
+
     private readonly object _inputLock = new();
     private readonly HashSet<DosKey> _keysDown = [];
     private int _mouseDx;
@@ -41,8 +51,23 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         InitializeComponent();
         Title = $"EmuDOS — {instance.Profile.Title}";
+        _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
+        _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
         _session = engine.CreateSession(instance, this);
-        Loaded += (_, _) => { _session.Start(); Focus(); };
+        Loaded += OnLoadedGrabFocus;
+        Activated += (_, _) => Keyboard.Focus(this);
+    }
+
+    private void OnLoadedGrabFocus(object sender, RoutedEventArgs e)
+    {
+        _session.Start();
+        Dispatcher.BeginInvoke(() =>
+        {
+            Activate();
+            Focus();
+            Keyboard.Focus(this);
+            _log.Info($"Loaded IsActive={IsActive} KbFocused={IsKeyboardFocused} FocusWithin={IsKeyboardFocusWithin}");
+        }, DispatcherPriority.Input);
     }
 
     public IInputSource Input => this;
@@ -74,9 +99,43 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             Dispatcher.BeginInvoke(RenderFrame);
     }
 
+    public void SetAudioSampleRate(int sampleRate)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                _audioBuffer = new BufferedWaveProvider(new WaveFormat(sampleRate, 16, 2))
+                {
+                    DiscardOnBufferOverflow = true,
+                    BufferDuration = TimeSpan.FromMilliseconds(400),
+                };
+                _audioOut = new WaveOutEvent { DesiredLatency = 100 };
+                _audioOut.Init(_audioBuffer);
+                _audioOut.Play();
+                _log.Info($"Audio init {sampleRate}Hz, state={_audioOut.PlaybackState}");
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Audio init failed: {ex.Message}");
+            }
+        });
+    }
+
     public void SubmitAudioFrames(ReadOnlySpan<short> interleavedStereo)
     {
-        // Audio output is added in a follow-up; ignored for now.
+        var buffer = _audioBuffer;
+        if (buffer is null || interleavedStereo.IsEmpty)
+            return;
+
+        var source = MemoryMarshal.AsBytes(interleavedStereo);
+        if (_audioBytes.Length < source.Length)
+            _audioBytes = new byte[source.Length];
+        source.CopyTo(_audioBytes);
+        buffer.AddSamples(_audioBytes, 0, source.Length);
+
+        if (++_audioBatches % 300 == 1)
+            _log.Info($"audio batch #{_audioBatches} frames={interleavedStereo.Length / 2} buffered={buffer.BufferedBytes}B state={_audioOut?.PlaybackState}");
     }
 
     private void CopyXrgb8888(in VideoFrame frame, int w, int h)
@@ -149,6 +208,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
+        _log.Info($"KeyDown {e.Key} (sys={e.SystemKey}) -> {key}");
         if (key != DosKey.None)
         {
             lock (_inputLock)
@@ -203,5 +263,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         _session.Stop();
         _session.Dispose();
+        _audioOut?.Stop();
+        _audioOut?.Dispose();
+        _audioOut = null;
+        _audioBuffer = null;
     }
 }

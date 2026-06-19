@@ -19,6 +19,11 @@ internal sealed class StubEngineHost : IEngineHost, IInputSource
 
     public void SubmitVideoFrame(in VideoFrame frame) => Interlocked.Increment(ref _frames);
 
+    public void SetAudioSampleRate(int sampleRate)
+    {
+        // headless test host — no audio device
+    }
+
     public void SubmitAudioFrames(ReadOnlySpan<short> interleavedStereo) =>
         Interlocked.Add(ref _audioSamples, interleavedStereo.Length);
 
