@@ -59,10 +59,11 @@ public sealed class CatalogDatabase
             {
                 ins.Transaction = tx;
                 ins.CommandText =
-                    "INSERT OR REPLACE INTO CatalogEntries (Id, Title, NormalizedTitle, ProfileJson) VALUES ($id, $title, $ntitle, $json);";
+                    "INSERT OR REPLACE INTO CatalogEntries (Id, Title, NormalizedTitle, NormalizedPrimary, ProfileJson) VALUES ($id, $title, $ntitle, $nprimary, $json);";
                 ins.Parameters.AddWithValue("$id", entry.Id);
                 ins.Parameters.AddWithValue("$title", entry.Title);
                 ins.Parameters.AddWithValue("$ntitle", NormalizeTitle(entry.Title));
+                ins.Parameters.AddWithValue("$nprimary", NormalizeTitle(PrimaryTitle(entry.Title)));
                 ins.Parameters.AddWithValue("$json", JsonSerializer.Serialize(entry.Profile, JsonOptions));
                 ins.ExecuteNonQuery();
             }
@@ -142,14 +143,26 @@ public sealed class CatalogDatabase
     /// </summary>
     public GameProfile? MatchByTitle(string title)
     {
-        var key = NormalizeTitle(title);
-        if (key.Length == 0)
+        var full = NormalizeTitle(title);
+        if (full.Length == 0)
             return null;
+        var primary = NormalizeTitle(PrimaryTitle(title));
 
         using var connection = Open();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT ProfileJson FROM CatalogEntries WHERE NormalizedTitle = $t LIMIT 1;";
-        cmd.Parameters.AddWithValue("$t", key);
+        cmd.CommandText = """
+            SELECT ProfileJson FROM CatalogEntries
+            WHERE NormalizedTitle = $full OR NormalizedPrimary = $full
+               OR ($primary <> '' AND (NormalizedTitle = $primary OR NormalizedPrimary = $primary))
+            ORDER BY CASE
+                WHEN NormalizedTitle = $full THEN 0
+                WHEN NormalizedPrimary = $full THEN 1
+                WHEN NormalizedTitle = $primary THEN 2
+                ELSE 3 END
+            LIMIT 1;
+            """;
+        cmd.Parameters.AddWithValue("$full", full);
+        cmd.Parameters.AddWithValue("$primary", primary);
         return cmd.ExecuteScalar() is string json
             ? JsonSerializer.Deserialize<GameProfile>(json, JsonOptions)
             : null;
@@ -165,7 +178,19 @@ public sealed class CatalogDatabase
         s = YearRegex.Replace(s, " ");
         s = RomanRegex.Replace(s, m => RomanToArabic(m.Value));
         s = ArticleRegex.Replace(s, " ");
+        s = NoiseWordRegex.Replace(s, " "); // "episode 1" -> "1", etc.
         return NonAlnumRegex.Replace(s, string.Empty);
+    }
+
+    /// <summary>The part of a title before its subtitle (" - " or ": "), for looser matching.</summary>
+    public static string PrimaryTitle(string title)
+    {
+        if (string.IsNullOrEmpty(title))
+            return title ?? string.Empty;
+        int dash = title.IndexOf(" - ", StringComparison.Ordinal);
+        int colon = title.IndexOf(": ", StringComparison.Ordinal);
+        int cut = dash >= 0 && (colon < 0 || dash < colon) ? dash : colon;
+        return cut > 0 ? title[..cut] : title;
     }
 
     private static string RomanToArabic(string roman) => roman switch
@@ -184,6 +209,9 @@ public sealed class CatalogDatabase
 
     private static readonly System.Text.RegularExpressions.Regex ArticleRegex =
         new(@"\b(the|a|an)\b", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex NoiseWordRegex =
+        new(@"\b(episode|ep|part|chapter|volume|vol|disk|disc)\b", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static readonly System.Text.RegularExpressions.Regex NonAlnumRegex =
         new(@"[^a-z0-9]+", System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -218,10 +246,11 @@ public sealed class CatalogDatabase
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             CREATE TABLE CatalogEntries (
-                Id              TEXT PRIMARY KEY,
-                Title           TEXT NOT NULL,
-                NormalizedTitle TEXT NOT NULL,
-                ProfileJson     TEXT NOT NULL
+                Id                TEXT PRIMARY KEY,
+                Title             TEXT NOT NULL,
+                NormalizedTitle   TEXT NOT NULL,
+                NormalizedPrimary TEXT NOT NULL,
+                ProfileJson       TEXT NOT NULL
             );
 
             CREATE TABLE Telltales (
@@ -232,6 +261,7 @@ public sealed class CatalogDatabase
 
             CREATE INDEX idx_telltale_file ON Telltales(FileName);
             CREATE INDEX idx_catalog_title ON CatalogEntries(NormalizedTitle);
+            CREATE INDEX idx_catalog_primary ON CatalogEntries(NormalizedPrimary);
 
             PRAGMA user_version = 1;
             """;
