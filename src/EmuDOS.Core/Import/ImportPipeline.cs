@@ -17,6 +17,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
     : IImportPipeline
 {
     private static readonly string[] ArchiveExtensions = [".zip", ".rar", ".7z"];
+    private static readonly string[] DiscImageExtensions = [".iso", ".cue", ".bin", ".chd"];
     private static readonly string[] ExecutableExtensions = [".exe", ".com", ".bat"];
     private static readonly string[] InstallerStems = ["install", "setup", "inst", "instalar"];
 
@@ -34,6 +35,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             Directory.CreateDirectory(box.ContentDir);
 
             SourceMediaType media;
+            string? discMount = null;
             if (Directory.Exists(sourcePath))
             {
                 progress?.Report(new ImportProgress("Copying", null));
@@ -46,23 +48,49 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 await Task.Run(() => ExtractArchive(sourcePath, box.ContentDir, cancellationToken), cancellationToken);
                 media = SourceMediaType.Zip;
             }
+            else if (IsDiscImage(sourcePath))
+            {
+                progress?.Report(new ImportProgress("Copying disc image", null));
+                discMount = await Task.Run(() => CopyDiscImage(sourcePath, box.ContentDir), cancellationToken);
+                media = SourceMediaType.Iso;
+            }
             else
             {
                 throw new NotSupportedException($"Unsupported source: {sourcePath}");
             }
 
-            var executables = FindExecutables(box.ContentDir);
-            var (classification, chosen) = Classify(executables, title);
+            List<string> executables;
+            ImportClassification classification;
+            string? chosen;
+            GameProfile profile;
 
-            var profile = new GameProfile
+            if (discMount is not null)
             {
-                Title = title,
-                SourceMedia = media,
-                Launch = new LaunchSpec { Executable = chosen },
-            };
+                // A CD image: mount it as D: and boot to DOS so the user can run its installer.
+                executables = [];
+                chosen = null;
+                classification = ImportClassification.NeedsInstall;
+                profile = new GameProfile
+                {
+                    Title = title,
+                    SourceMedia = media,
+                    Launch = new LaunchSpec { PreCommands = [$"IMGMOUNT D: \"C:\\{discMount}\" -t iso"] },
+                };
+            }
+            else
+            {
+                executables = FindExecutables(box.ContentDir);
+                (classification, chosen) = Classify(executables, title);
+                profile = new GameProfile
+                {
+                    Title = title,
+                    SourceMedia = media,
+                    Launch = new LaunchSpec { Executable = chosen },
+                };
+            }
 
-            // Enrich with curated config if the catalog recognizes the content.
-            if (resolver is not null)
+            // Enrich with curated config if the catalog recognizes the content (not for raw discs).
+            if (resolver is not null && discMount is null)
             {
                 var contentFiles = Directory.EnumerateFiles(box.ContentDir, "*", SearchOption.AllDirectories)
                     .Select(Path.GetFileName)
@@ -89,6 +117,60 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
 
     private static bool IsArchive(string path) =>
         ArchiveExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    private static bool IsDiscImage(string path) =>
+        DiscImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    // Copy a disc image into the content folder — for a .cue, also its referenced tracks; for a
+    // bare .bin, a sibling .cue if present. Returns the file name to IMGMOUNT.
+    private static string CopyDiscImage(string sourcePath, string contentDir)
+    {
+        Directory.CreateDirectory(contentDir);
+        var name = Path.GetFileName(sourcePath);
+        var srcDir = Path.GetDirectoryName(sourcePath) ?? string.Empty;
+        var ext = Path.GetExtension(sourcePath).ToLowerInvariant();
+
+        File.Copy(sourcePath, Path.Combine(contentDir, name), overwrite: true);
+
+        if (ext == ".cue")
+        {
+            foreach (var track in CueReferencedFiles(sourcePath))
+            {
+                var src = Path.Combine(srcDir, track);
+                if (File.Exists(src))
+                    File.Copy(src, Path.Combine(contentDir, Path.GetFileName(track)), overwrite: true);
+            }
+            return name;
+        }
+
+        if (ext == ".bin")
+        {
+            var cue = Path.ChangeExtension(sourcePath, ".cue");
+            if (File.Exists(cue))
+            {
+                var cueName = Path.GetFileName(cue);
+                File.Copy(cue, Path.Combine(contentDir, cueName), overwrite: true);
+                return cueName; // mounting the .cue pulls in the .bin track
+            }
+        }
+
+        return name;
+    }
+
+    private static IEnumerable<string> CueReferencedFiles(string cuePath)
+    {
+        foreach (var line in File.ReadLines(cuePath))
+        {
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith("FILE", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            int open = trimmed.IndexOf('"');
+            int close = open >= 0 ? trimmed.IndexOf('"', open + 1) : -1;
+            if (open >= 0 && close > open)
+                yield return trimmed.Substring(open + 1, close - open - 1);
+        }
+    }
 
     private static string DeriveTitle(string sourcePath)
     {

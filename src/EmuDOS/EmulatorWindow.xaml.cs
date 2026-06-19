@@ -105,6 +105,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _lcdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _lcdTimer.Tick += UpdateLcd;
         _lcdTimer.Start();
+
+        // A freshly-imported CD boots to DOS with the disc on D: — tell the user how to install.
+        if (string.IsNullOrWhiteSpace(_instance.Profile.Launch.Executable)
+            && _instance.Profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT", StringComparison.OrdinalIgnoreCase)))
+        {
+            ShowHint("Disc mounted as D:  —  type  D:  then run the installer (SETUP or INSTALL)", 7);
+        }
     }
 
     private void UpdateLcd(object? sender, EventArgs e)
@@ -474,15 +481,16 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         SetCursorPos((int)screen.X, (int)screen.Y);
     }
 
-    private void ShowHint(string text)
+    private void ShowHint(string text, double seconds = 1.3)
     {
         Hint.Text = text;
         Hint.Visibility = Visibility.Visible;
         if (_hintTimer is null)
         {
-            _hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.3) };
+            _hintTimer = new DispatcherTimer();
             _hintTimer.Tick += (_, _) => { _hintTimer!.Stop(); Hint.Visibility = Visibility.Collapsed; };
         }
+        _hintTimer.Interval = TimeSpan.FromSeconds(seconds);
         _hintTimer.Stop();
         _hintTimer.Start();
     }

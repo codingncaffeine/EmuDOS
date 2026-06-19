@@ -90,6 +90,25 @@ public class ImportPipelineTests
         Assert.True(File.Exists(Path.Combine(result.GameboxPath!, "content", "GAME", "RUN.EXE")));
     }
 
+    [Fact]
+    public async Task Disc_image_is_imported_as_a_mounted_cd_needing_install()
+    {
+        var dir = TempDir();
+        var iso = Path.Combine(dir, "Some Game.iso");
+        File.WriteAllBytes(iso, new byte[4096]);
+        var (pipeline, store) = NewPipeline();
+
+        var result = await pipeline.ImportAsync(iso);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(ImportClassification.NeedsInstall, result.Classification);
+        Assert.True(File.Exists(Path.Combine(result.GameboxPath!, "content", "Some Game.iso")));
+
+        var launch = store.ReadProfile(result.GameboxPath!).Launch;
+        Assert.Null(launch.Executable);
+        Assert.Contains(launch.PreCommands, c => c.Contains("IMGMOUNT D:") && c.Contains("Some Game.iso"));
+    }
+
     private static (ImportPipeline, GameboxStore) NewPipeline()
     {
         var paths = new AppPaths(Path.Combine(Path.GetTempPath(), "emudos-tests", Guid.NewGuid().ToString("N")));
