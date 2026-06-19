@@ -54,9 +54,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private double _mouseAccumX;
     private double _mouseAccumY;
     private double _mouseScale = MouseSensitivity;
+    private double _sensitivity = MouseSensitivity;
+    private double _dpiScale = 1.0;
+    private bool _mouseLocked;
     private bool _mouseLeft;
     private bool _mouseRight;
     private bool _mouseMiddle;
+    private DispatcherTimer? _hintTimer;
     private Point? _lastMouse;
 
     public EmulatorWindow(IDosEngine engine, GameInstance instance)
@@ -85,7 +89,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private void OnLoadedGrabFocus(object sender, RoutedEventArgs e)
     {
         _session.Start();
-        _mouseScale = VisualTreeHelper.GetDpi(this).DpiScaleX * MouseSensitivity;
+        _dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        _mouseScale = _dpiScale * _sensitivity;
+        Deactivated += (_, _) => { if (_mouseLocked) ToggleMouseLock(); };
         Dispatcher.BeginInvoke(() =>
         {
             Activate();
@@ -381,6 +387,24 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
         var pos = e.GetPosition(this);
+
+        // Locked (FPS) mode: feed the delta from centre, then warp the cursor back so it can
+        // never hit the window edge — infinite turning, like a captured mouse.
+        if (_mouseLocked)
+        {
+            double dx = pos.X - ActualWidth / 2, dy = pos.Y - ActualHeight / 2;
+            if (dx != 0 || dy != 0)
+            {
+                lock (_inputLock)
+                {
+                    _mouseAccumX += dx * _mouseScale;
+                    _mouseAccumY += dy * _mouseScale;
+                }
+                WarpToCentre();
+            }
+            return;
+        }
+
         if (_lastMouse is { } last)
         {
             lock (_inputLock)
@@ -395,6 +419,15 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnMouseButton(object sender, MouseButtonEventArgs e)
     {
+        // Middle button is the host lock toggle (not forwarded to the game).
+        if (e.ChangedButton == MouseButton.Middle)
+        {
+            if (e.ButtonState == MouseButtonState.Pressed)
+                ToggleMouseLock();
+            e.Handled = true;
+            return;
+        }
+
         bool down = e.ButtonState == MouseButtonState.Pressed;
         lock (_inputLock)
         {
@@ -402,12 +435,61 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             {
                 case MouseButton.Left: _mouseLeft = down; break;
                 case MouseButton.Right: _mouseRight = down; break;
-                case MouseButton.Middle: _mouseMiddle = down; break;
             }
         }
 
         Focus();
     }
+
+    private void OnMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // DOS games don't read the wheel, so it's free for adjusting mouse sensitivity.
+        _sensitivity = Math.Clamp(_sensitivity + (e.Delta > 0 ? 0.25 : -0.25), 0.25, 6.0);
+        _mouseScale = _dpiScale * _sensitivity;
+        ShowHint($"Mouse sensitivity {_sensitivity:0.00}×");
+        e.Handled = true;
+    }
+
+    private void ToggleMouseLock()
+    {
+        _mouseLocked = !_mouseLocked;
+        if (_mouseLocked)
+        {
+            Cursor = Cursors.None;
+            CaptureMouse();
+            WarpToCentre();
+            ShowHint("Mouse locked — middle-click to release");
+        }
+        else
+        {
+            ReleaseMouseCapture();
+            Cursor = Cursors.Arrow;
+            ShowHint("Mouse unlocked");
+        }
+    }
+
+    private void WarpToCentre()
+    {
+        var screen = PointToScreen(new Point(ActualWidth / 2, ActualHeight / 2));
+        SetCursorPos((int)screen.X, (int)screen.Y);
+    }
+
+    private void ShowHint(string text)
+    {
+        Hint.Text = text;
+        Hint.Visibility = Visibility.Visible;
+        if (_hintTimer is null)
+        {
+            _hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.3) };
+            _hintTimer.Tick += (_, _) => { _hintTimer!.Stop(); Hint.Visibility = Visibility.Collapsed; };
+        }
+        _hintTimer.Stop();
+        _hintTimer.Start();
+    }
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool SetCursorPos(int x, int y);
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
