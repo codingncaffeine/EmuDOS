@@ -57,6 +57,7 @@
                                   MouseMove="OnBoxMouseMove"
                                   MouseLeftButtonUp="OnBoxMouseUp"
                                   MouseRightButtonUp="OnBoxRightClick"
+                                  AllowDrop="True" DragOver="OnBoxArtDragOver" Drop="OnBoxArtDrop"
                                   Background="Transparent">
                                 <Grid.Effect>
                                     <DropShadowEffect BlurRadius="7" ShadowDepth="3" Opacity="0.55"/>

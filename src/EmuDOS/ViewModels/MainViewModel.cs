@@ -200,6 +200,46 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Fetch box covers for any games missing one, updating each tile as it arrives.</summary>
+    /// <summary>Set a game's box art from dropped image bytes (re-encoded to PNG).</summary>
+    public void SetBoxArt(GameTile tile, byte[] imageBytes)
+    {
+        try
+        {
+            Directory.CreateDirectory(tile.MediaDir);
+            File.WriteAllBytes(tile.BoxFrontPath, ToPng(imageBytes) ?? imageBytes);
+            tile.LoadCover();
+            _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath);
+            Report($"Box art set for {tile.Title}.", busy: false);
+        }
+        catch (Exception ex)
+        {
+            Report($"Couldn't set box art: {ex.Message}", busy: false);
+        }
+    }
+
+    // Normalize whatever was dropped (JPG/GIF/BMP/…) to PNG so box-front.png is always a real PNG.
+    private static byte[]? ToPng(byte[] bytes)
+    {
+        try
+        {
+            using var input = new MemoryStream(bytes);
+            var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(
+                input,
+                System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(decoder.Frames[0]));
+            using var output = new MemoryStream();
+            encoder.Save(output);
+            return output.ToArray();
+        }
+        catch
+        {
+            return null; // unsupported format — fall back to the raw bytes
+        }
+    }
+
     /// <summary>Re-fetch box art for a single game (overwrites only on success).</summary>
     public async Task DownloadArtAsync(GameTile tile)
     {

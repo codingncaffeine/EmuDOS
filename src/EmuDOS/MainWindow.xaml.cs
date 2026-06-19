@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using EmuDOS.Controls;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Engine.DosBoxPure;
@@ -378,6 +381,98 @@ public partial class MainWindow : Window
             ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;
+    }
+
+    // ── Drag an image onto a box to set its cover (local file or straight from a browser) ──
+
+    private static readonly HttpClient ImageHttp = new();
+    private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"];
+
+    private void OnBoxArtDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = HasDroppableImage(e.Data) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnBoxArtDrop(object sender, DragEventArgs e)
+    {
+        if (Vm is null || sender is not FrameworkElement { DataContext: GameTile tile })
+            return;
+        if (!HasDroppableImage(e.Data))
+            return; // let a non-image (e.g. a game folder) fall through to import
+
+        e.Handled = true;
+        Vm.Report($"Adding box art for {tile.Title}…", busy: true);
+        var bytes = await ExtractDroppedImageAsync(e.Data);
+        if (bytes is not null)
+            Vm.SetBoxArt(tile, bytes);
+        else
+            Vm.Report("Couldn't read the dropped image.", busy: false);
+    }
+
+    private static bool HasDroppableImage(IDataObject data) =>
+        (data.GetData(DataFormats.FileDrop) is string[] files && files.Any(IsImageFile))
+        || UrlFrom(data) is not null
+        || data.GetDataPresent(DataFormats.Bitmap);
+
+    private static bool IsImageFile(string path) =>
+        ImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    private static async Task<byte[]?> ExtractDroppedImageAsync(IDataObject data)
+    {
+        if (data.GetData(DataFormats.FileDrop) is string[] files
+            && files.FirstOrDefault(IsImageFile) is { } file)
+        {
+            try { return await File.ReadAllBytesAsync(file); } catch { /* fall through */ }
+        }
+
+        if (UrlFrom(data) is { } url)
+        {
+            try { return await ImageHttp.GetByteArrayAsync(url); } catch { /* fall through */ }
+        }
+
+        if (data.GetData(DataFormats.Bitmap) is BitmapSource bitmap)
+        {
+            try
+            {
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                using var ms = new MemoryStream();
+                encoder.Save(ms);
+                return ms.ToArray();
+            }
+            catch { /* fall through */ }
+        }
+
+        return null;
+    }
+
+    // Browsers expose a dragged image's address in one of these formats.
+    private static string? UrlFrom(IDataObject data)
+    {
+        foreach (var format in new[] { "UniformResourceLocatorW", "UniformResourceLocator", DataFormats.Text })
+        {
+            if (!data.GetDataPresent(format))
+                continue;
+
+            var raw = data.GetData(format);
+            string? text = raw as string;
+            if (text is null && raw is MemoryStream ms)
+            {
+                var bytes = ms.ToArray();
+                text = format == "UniformResourceLocatorW"
+                    ? Encoding.Unicode.GetString(bytes)
+                    : Encoding.Default.GetString(bytes);
+            }
+
+            var first = text?.Split('\n', '\r').FirstOrDefault()?.Trim().Trim('\0');
+            if (first is not null
+                && (first.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                    || first.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+                return first;
+        }
+
+        return null;
     }
 
     /// <summary>Re-attempt covers for games still missing one (after an art login/key change).</summary>
