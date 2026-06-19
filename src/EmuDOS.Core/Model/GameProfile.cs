@@ -30,6 +30,9 @@ public sealed record GameProfile
 
     public SoundSpec Sound { get; init; } = new();
 
+    /// <summary>Frontend display tweaks (brightness/gamma) applied by EmuDOS, not the core.</summary>
+    public DisplaySpec Display { get; init; } = new();
+
     public JoystickSpec Joystick { get; init; } = new();
 
     public LaunchSpec Launch { get; init; } = new();

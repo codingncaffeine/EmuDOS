@@ -36,6 +36,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private byte[] _audioBytes = [];
     private int _audioBatches;
 
+    private readonly byte[]? _lut; // brightness/gamma lookup; null = no adjustment (fast path)
+
     private readonly AppLog _log;
 
     private readonly object _inputLock = new();
@@ -54,6 +56,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         Title = $"EmuDOS — {instance.Profile.Title}";
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
+        _lut = BuildLut(instance.Profile.Display);
         _session = engine.CreateSession(instance, this);
         Loaded += OnLoadedGrabFocus;
         Activated += (_, _) => Keyboard.Focus(this);
@@ -91,6 +94,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
                 CopyXrgb8888(frame, w, h);
             else
                 CopyRgb565(frame, w, h);
+
+            ApplyLut(w * h);
 
             _frameWidth = w;
             _frameHeight = h;
@@ -161,6 +166,39 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
                 _frameBuffer[dst++] = (byte)((r << 3) | (r >> 2));
                 _frameBuffer[dst++] = 0;
             }
+        }
+    }
+
+    private static byte[]? BuildLut(DisplaySpec display)
+    {
+        bool identity = Math.Abs(display.Brightness - 1.0) < 0.001 && Math.Abs(display.Gamma - 1.0) < 0.001;
+        if (identity)
+            return null;
+
+        double invGamma = 1.0 / Math.Max(0.1, display.Gamma);
+        var lut = new byte[256];
+        for (int i = 0; i < 256; i++)
+        {
+            double v = Math.Pow(i / 255.0, invGamma) * display.Brightness;
+            lut[i] = (byte)Math.Clamp(v * 255.0, 0.0, 255.0);
+        }
+
+        return lut;
+    }
+
+    private void ApplyLut(int pixelCount)
+    {
+        var lut = _lut;
+        if (lut is null)
+            return;
+
+        var buf = _frameBuffer;
+        int n = pixelCount * 4;
+        for (int i = 0; i + 2 < n; i += 4)
+        {
+            buf[i] = lut[buf[i]];         // B
+            buf[i + 1] = lut[buf[i + 1]]; // G
+            buf[i + 2] = lut[buf[i + 2]]; // R
         }
     }
 

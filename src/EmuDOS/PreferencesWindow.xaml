@@ -48,6 +48,27 @@
 
                     <CheckBox x:Name="AspectBox" Content="Correct aspect ratio" Foreground="#C8B89C" Margin="0,16,0,0"/>
 
+                    <TextBlock Text="Display (EmuDOS)" FontWeight="SemiBold" Foreground="#C8B89C" Margin="0,18,0,2"/>
+                    <TextBlock Foreground="#A89A86" Margin="0,0,0,6" TextWrapping="Wrap"
+                               Text="Applied by EmuDOS to the picture — the core has no brightness/gamma. Raise gamma to lift a too-dark game."/>
+
+                    <DockPanel Margin="0,4,0,0">
+                        <TextBlock DockPanel.Dock="Left" Text="Brightness" Width="80" Foreground="#C8B89C" VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" x:Name="BrightnessValue" Width="44" Foreground="#A89A86"
+                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                        <Slider x:Name="BrightnessSlider" Minimum="0.5" Maximum="1.5" Value="1"
+                                SmallChange="0.05" LargeChange="0.1" VerticalAlignment="Center"
+                                ValueChanged="OnDisplaySliderChanged"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock DockPanel.Dock="Left" Text="Gamma" Width="80" Foreground="#C8B89C" VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" x:Name="GammaValue" Width="44" Foreground="#A89A86"
+                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                        <Slider x:Name="GammaSlider" Minimum="0.5" Maximum="2.0" Value="1"
+                                SmallChange="0.05" LargeChange="0.1" VerticalAlignment="Center"
+                                ValueChanged="OnDisplaySliderChanged"/>
+                    </DockPanel>
+
                     <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                         <Button Content="Save" Padding="20,6" Click="OnSaveGameOptions"/>
                         <Button Content="Reset to catalog default" Padding="14,6" Margin="10,0,0,0" Click="OnResetGameOptions"/>

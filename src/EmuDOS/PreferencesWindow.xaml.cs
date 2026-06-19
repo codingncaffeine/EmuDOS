@@ -77,7 +77,20 @@ public partial class PreferencesWindow : Window
         MidiBox.SelectedItem = _profile.Sound.Midi;
 
         AspectBox.IsChecked = _profile.Machine.AspectCorrection;
+
+        BrightnessSlider.Value = _profile.Display.Brightness;
+        GammaSlider.Value = _profile.Display.Gamma;
+        OnDisplaySliderChanged(this, default);
+
         GameOptionsStatus.Text = string.Empty;
+    }
+
+    private void OnDisplaySliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (BrightnessValue is not null)
+            BrightnessValue.Text = BrightnessSlider.Value.ToString("0.00");
+        if (GammaValue is not null)
+            GammaValue.Text = GammaSlider.Value.ToString("0.00");
     }
 
     private void OnCyclesModeChanged(object sender, SelectionChangedEventArgs e) => UpdateCyclesEnabled();
@@ -115,6 +128,11 @@ public partial class PreferencesWindow : Window
             {
                 SoundBlaster = (SoundBlasterType)SoundCardBox.SelectedItem!,
                 Midi = (MidiDevice)MidiBox.SelectedItem!,
+            },
+            Display = _profile.Display with
+            {
+                Brightness = BrightnessSlider.Value,
+                Gamma = GammaSlider.Value,
             },
             Origin = ProfileOrigin.UserOverride,
         };
