@@ -36,6 +36,12 @@ public sealed class LibretroCore : IDisposable
     private readonly RetroInputStateDelegate _inputStateCb;
     private RetroKeyboardEventDelegate? _keyboardEvent;
 
+    private readonly RetroMidiInputEnabled _midiInputEnabled;
+    private readonly RetroMidiOutputEnabled _midiOutputEnabled;
+    private readonly RetroMidiRead _midiRead;
+    private readonly RetroMidiWrite _midiWrite;
+    private readonly RetroMidiFlush _midiFlush;
+
     private readonly RetroInit _init;
     private readonly RetroDeinit _deinit;
     private readonly RetroGetSystemInfo _getSystemInfo;
@@ -92,6 +98,12 @@ public sealed class LibretroCore : IDisposable
         _audioBatchCb = OnAudioBatch;
         _inputPollCb = () => InputPoll?.Invoke();
         _inputStateCb = OnInputState;
+
+        _midiInputEnabled = () => false;
+        _midiOutputEnabled = () => true;
+        _midiRead = _ => false;
+        _midiWrite = (value, _) => { MidiByte?.Invoke(value); return true; };
+        _midiFlush = () => true;
     }
 
     /// <summary>dosbox_pure_* option values returned to the core on <c>GET_VARIABLE</c>.</summary>
@@ -122,6 +134,12 @@ public sealed class LibretroCore : IDisposable
     /// </summary>
     public void SendKeyEvent(bool down, uint keycode, uint character, ushort modifiers) =>
         _keyboardEvent?.Invoke(down, keycode, character, modifiers);
+
+    /// <summary>
+    /// Each MIDI byte the core emits when <c>dosbox_pure_midi = "frontend"</c>. We synthesize it
+    /// ourselves (our own MT-32) and read the LCD from the stream.
+    /// </summary>
+    public Action<byte>? MidiByte { get; set; }
 
     public bool NeedsFullPath { get; private set; }
 
@@ -299,6 +317,19 @@ public sealed class LibretroCore : IDisposable
                     _keyboardEvent = fp != 0
                         ? Marshal.GetDelegateForFunctionPointer<RetroKeyboardEventDelegate>(fp)
                         : null;
+                }
+                return true;
+
+            case EnvGetMidiInterface:
+                // Fill the retro_midi_interface struct with our 5 callbacks so the core routes
+                // MIDI ("frontend" driver) to us. Layout: 5 consecutive function pointers.
+                if (data != 0)
+                {
+                    Marshal.WriteIntPtr(data, 0 * nint.Size, Marshal.GetFunctionPointerForDelegate(_midiInputEnabled));
+                    Marshal.WriteIntPtr(data, 1 * nint.Size, Marshal.GetFunctionPointerForDelegate(_midiOutputEnabled));
+                    Marshal.WriteIntPtr(data, 2 * nint.Size, Marshal.GetFunctionPointerForDelegate(_midiRead));
+                    Marshal.WriteIntPtr(data, 3 * nint.Size, Marshal.GetFunctionPointerForDelegate(_midiWrite));
+                    Marshal.WriteIntPtr(data, 4 * nint.Size, Marshal.GetFunctionPointerForDelegate(_midiFlush));
                 }
                 return true;
 

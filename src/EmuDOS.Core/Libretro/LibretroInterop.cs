@@ -30,6 +30,19 @@ internal delegate short RetroInputStateDelegate(uint port, uint device, uint ind
 internal delegate void RetroKeyboardEventDelegate(
     [MarshalAs(UnmanagedType.U1)] bool down, uint keycode, uint character, ushort keyModifiers);
 
+// retro_midi_interface callbacks (the frontend implements these; the core calls them to send
+// MIDI out when dosbox_pure_midi = "frontend"). RETRO_CALLCONV = cdecl.
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)]
+internal delegate bool RetroMidiInputEnabled();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)]
+internal delegate bool RetroMidiOutputEnabled();
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)]
+internal delegate bool RetroMidiRead(nint outByte);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)]
+internal delegate bool RetroMidiWrite([MarshalAs(UnmanagedType.U1)] byte value, uint deltaTime);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.U1)]
+internal delegate bool RetroMidiFlush();
+
 // Exported core entry points.
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroInit();
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroDeinit();

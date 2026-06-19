@@ -111,6 +111,7 @@ public sealed class DosBoxPureSession : IDosSession
             _core.Audio = _host.SubmitAudioFrames;
             _core.InputPoll = PollInput;
             _core.Input = QueryInput;
+            _core.MidiByte = _midi.Feed;
 
             _core.SetCallbacks();
             _core.Init();
@@ -188,12 +189,13 @@ public sealed class DosBoxPureSession : IDosSession
         }
     }
 
+    private readonly Audio.MidiMonitor _midi = new();
     private long _kbQueries, _kbHits, _padQueries, _mouseQueries, _otherQueries, _keysSent;
 
     public string InputDiagnostics =>
         $"keysSent={Interlocked.Read(ref _keysSent)} kbQ={Interlocked.Read(ref _kbQueries)} "
         + $"padQ={Interlocked.Read(ref _padQueries)} mouseQ={Interlocked.Read(ref _mouseQueries)} "
-        + $"otherQ={Interlocked.Read(ref _otherQueries)}";
+        + $"otherQ={Interlocked.Read(ref _otherQueries)} | midiBytes={_midi.ByteCount} lcd='{_midi.Lcd}'";
 
     private short QueryInput(uint port, uint device, uint index, uint id)
     {

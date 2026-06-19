@@ -180,10 +180,21 @@ public static class DosBoxPureAdapter
             ? "none"
             : NearestPreset(memory.SizeMb, MemoryPresets).ToString(CultureInfo.InvariantCulture);
 
-    private static string MidiValue(SoundSpec sound) =>
-        sound.Midi != MidiDevice.None && !string.IsNullOrWhiteSpace(sound.MidiSoundFont)
-            ? sound.MidiSoundFont!
-            : "disabled";
+    private static string MidiValue(SoundSpec sound)
+    {
+        // An explicit SoundFont file wins (the core's TSF plays it).
+        if (!string.IsNullOrWhiteSpace(sound.MidiSoundFont))
+            return sound.MidiSoundFont!;
+
+        // Otherwise MT-32 / General MIDI route to the libretro frontend driver — EmuDOS
+        // synthesizes them with its own MT-32 and reads the LCD from the stream.
+        return sound.Midi switch
+        {
+            MidiDevice.Mt32 => "frontend",
+            MidiDevice.GeneralMidi => "frontend",
+            _ => "disabled",
+        };
+    }
 
     private static string SvgaMemValue(int kb) =>
         Math.Clamp(kb / 512, 0, 8).ToString(CultureInfo.InvariantCulture);
