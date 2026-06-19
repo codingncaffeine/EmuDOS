@@ -7,9 +7,11 @@
         xmlns:controls="clr-namespace:EmuDOS.Controls"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
-        Title="EmuDOS" Height="760" Width="595"
+        Title="EmuDOS" Height="840" Width="1458"
+        MinWidth="1458" MaxWidth="1458"
         Background="#1A1411" WindowStartupLocation="CenterScreen"
-        AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
+        AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver"
+        PreviewKeyDown="OnWindowKeyDown">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -17,14 +19,16 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- The library: one bookcase wide, repeating only vertically, scrolling down. -->
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-            <Border Width="561" HorizontalAlignment="Center" VerticalAlignment="Top">
+        <!-- The library: the bookcase, width locked, repeating vertically. The bookshelf fills
+             at least the viewport (so empty shelves always show) and grows as games are added. -->
+        <ScrollViewer Grid.Row="0" x:Name="Scroller"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Border Width="1425" HorizontalAlignment="Center" VerticalAlignment="Top"
+                    MinHeight="{Binding ViewportHeight, ElementName=Scroller}">
                 <Border.Background>
-                    <ImageBrush ImageSource="/Assets/bookshelf.png" TileMode="Tile"
+                    <ImageBrush ImageSource="/Assets/bookshelf2.png" TileMode="Tile"
                                 Stretch="None" AlignmentX="Left" AlignmentY="Top"
-                                Viewport="0,0,561,645" ViewportUnits="Absolute"/>
+                                Viewport="0,0,1425,671" ViewportUnits="Absolute"/>
                 </Border.Background>
 
                 <ItemsControl ItemsSource="{Binding Games}">
@@ -35,18 +39,25 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="#D9B98A" CornerRadius="2"
-                                    BorderBrush="#3A2A1C" BorderThickness="1"
-                                    Cursor="Hand" MouseLeftButtonUp="OnGameClick"
-                                    ToolTip="{Binding Title}">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="6" ShadowDepth="2" Opacity="0.55"/>
-                                </Border.Effect>
-                                <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
-                                           TextAlignment="Center" Foreground="#2A1B10"
-                                           FontSize="9" FontWeight="SemiBold" Margin="3"
-                                           VerticalAlignment="Center"/>
-                            </Border>
+                            <!-- Box sized to the cover's real aspect, so art fills it with no
+                                 brown letterbox; the placeholder shows only when there's no art. -->
+                            <Grid Width="{Binding BoxWidth}" Height="{Binding BoxHeight}"
+                                  Cursor="Hand" ToolTip="{Binding Title}"
+                                  MouseLeftButtonDown="OnBoxMouseDown"
+                                  MouseMove="OnBoxMouseMove"
+                                  MouseLeftButtonUp="OnBoxMouseUp">
+                                <Grid.Effect>
+                                    <DropShadowEffect BlurRadius="7" ShadowDepth="3" Opacity="0.55"/>
+                                </Grid.Effect>
+                                <Border Background="#D9B98A" CornerRadius="2"
+                                        BorderBrush="#3A2A1C" BorderThickness="1">
+                                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
+                                               TextAlignment="Center" Foreground="#2A1B10"
+                                               FontSize="11" FontWeight="SemiBold" Margin="4"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <Image Source="{Binding Cover}" Stretch="Fill"/>
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

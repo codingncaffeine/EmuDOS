@@ -30,5 +30,8 @@ public partial class App : Application
                 autoImport.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         if (Environment.GetEnvironmentVariable("EMUDOS_AUTOPLAY") == "1")
             await window.PlayFirstAsync();
+
+        // Backfill covers for anything already on the shelf without one.
+        await viewModel.FetchMissingArtAsync();
     }
 }

@@ -20,6 +20,17 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _showStatus;
 
+    [ObservableProperty]
+    private bool _isEditMode;
+
+    partial void OnIsEditModeChanged(bool value)
+    {
+        if (value)
+            Report("Edit mode — drag boxes onto the shelves, then Ctrl+S to save the layout.", busy: false);
+        else
+            ClearStatus();
+    }
+
     public MainViewModel(AppServices services)
     {
         _services = services;
@@ -75,5 +86,38 @@ public sealed partial class MainViewModel : ObservableObject
             ClearStatus();
         else
             IsBusy = false;
+
+        await FetchMissingArtAsync();
+    }
+
+    /// <summary>Fetch box covers for any games missing one, updating each tile as it arrives.</summary>
+    public async Task FetchMissingArtAsync()
+    {
+        var pending = Games.Where(t => t.Cover is null).ToList();
+        if (pending.Count == 0)
+            return;
+
+        foreach (var tile in pending)
+        {
+            if (File.Exists(tile.BoxFrontPath))
+            {
+                tile.LoadCover();
+                continue;
+            }
+
+            Report($"Fetching art for {tile.Title}…", busy: true);
+            try
+            {
+                var path = await _services.Art.FetchBoxFrontAsync(tile.Title, tile.MediaDir);
+                if (path is not null)
+                    tile.LoadCover();
+            }
+            catch
+            {
+                // Network/art hiccup — skip this one, keep going.
+            }
+        }
+
+        ClearStatus();
     }
 }

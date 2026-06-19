@@ -12,6 +12,7 @@
   <!-- App-owned art embedded in the exe (the shelf backdrop). -->
   <ItemGroup>
     <Resource Include="..\..\Assets\bookshelf.png" Link="Assets\bookshelf.png" />
+    <Resource Include="..\..\Assets\bookshelf2.png" Link="Assets\bookshelf2.png" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -4,6 +4,7 @@ using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Import;
 using EmuDOS.Core.Infrastructure;
 using EmuDOS.Core.Library;
+using EmuDOS.Metadata;
 
 namespace EmuDOS.Services;
 
@@ -22,6 +23,11 @@ public sealed class AppServices
         Resolver = new ProfileResolver(Catalog);
         Import = new ImportPipeline(Paths, Store, Resolver);
         Downloads = new DownloadService(new HttpClient(), Paths);
+
+        var ssHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        ssHttp.DefaultRequestHeaders.Add("User-Agent", "EmuDOS/1.0");
+        // Anonymous (dev-cred) access for now; the Accounts tab can supply a user login later.
+        Art = new ArtService(new ScreenScraperClient(ssHttp, string.Empty, string.Empty));
     }
 
     public AppPaths Paths { get; }
@@ -37,4 +43,6 @@ public sealed class AppServices
     public ImportPipeline Import { get; }
 
     public DownloadService Downloads { get; }
+
+    public ArtService Art { get; }
 }
