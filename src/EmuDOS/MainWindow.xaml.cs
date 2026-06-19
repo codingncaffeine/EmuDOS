@@ -61,12 +61,16 @@ public partial class MainWindow : Window
         var boxArt = new MenuItem { Header = "Download box art" };
         boxArt.Click += async (_, _) => await (Vm?.DownloadArtAsync(tile) ?? Task.CompletedTask);
 
+        var customArt = new MenuItem { Header = "Set box art from file…" };
+        customArt.Click += (_, _) => SetCustomArt(tile);
+
         var manual = new MenuItem { Header = "Download manual" };
         manual.Click += async (_, _) => await DownloadManualAsync(tile);
 
         menu.Items.Add(preferences);
         menu.Items.Add(openInDos);
         menu.Items.Add(boxArt);
+        menu.Items.Add(customArt);
         menu.Items.Add(manual);
 
         // A "Run" submenu of executables we've used before plus any found in the content, so the
@@ -166,6 +170,20 @@ public partial class MainWindow : Window
         foreach (var c in Path.GetInvalidFileNameChars())
             name = name.Replace(c, '_');
         return name.Trim();
+    }
+
+    private void SetCustomArt(GameTile tile)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = $"Choose box art for {tile.Title}",
+            Filter = "Images|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp|All files|*.*",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try { Vm?.SetBoxArt(tile, File.ReadAllBytes(dialog.FileName)); }
+        catch (Exception ex) { Vm?.Report($"Couldn't set box art: {ex.Message}", busy: false); }
     }
 
     private void OpenOptions(GameTile tile)
