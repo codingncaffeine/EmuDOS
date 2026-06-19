@@ -4,68 +4,59 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:EmuDOS.ViewModels"
+        xmlns:controls="clr-namespace:EmuDOS.Controls"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
-        Title="EmuDOS" Height="720" Width="1100"
-        Background="#1A1411"
+        Title="EmuDOS" Height="760" Width="595"
+        Background="#1A1411" WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Top bar -->
-        <Grid Grid.Row="0" Background="#2A211B">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="EmuDOS" Foreground="#E8DCC8"
-                       FontSize="20" FontWeight="SemiBold" Margin="16,10"/>
-            <Button Grid.Column="1" Content="Add games…" Margin="8" Padding="14,6"
-                    Click="OnAddFolder" VerticalAlignment="Center"/>
-        </Grid>
-
-        <!-- The shelf: a repeating bookshelf backdrop with box covers laid on top -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <Grid>
-                <Grid.Background>
+        <!-- The library: one bookcase wide, repeating only vertically, scrolling down. -->
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Border Width="561" HorizontalAlignment="Center" VerticalAlignment="Top">
+                <Border.Background>
                     <ImageBrush ImageSource="/Assets/bookshelf.png" TileMode="Tile"
                                 Stretch="None" AlignmentX="Left" AlignmentY="Top"
                                 Viewport="0,0,561,645" ViewportUnits="Absolute"/>
-                </Grid.Background>
+                </Border.Background>
 
-                <ItemsControl ItemsSource="{Binding Games}" Margin="24">
+                <ItemsControl ItemsSource="{Binding Games}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal"/>
+                            <controls:ShelfPanel/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Width="116" Height="150" Margin="10"
-                                    Background="#D9B98A" CornerRadius="3"
-                                    BorderBrush="#3A2A1C" BorderThickness="1">
+                            <Border Background="#D9B98A" CornerRadius="2"
+                                    BorderBrush="#3A2A1C" BorderThickness="1"
+                                    Cursor="Hand" MouseLeftButtonUp="OnGameClick"
+                                    ToolTip="{Binding Title}">
                                 <Border.Effect>
-                                    <DropShadowEffect BlurRadius="10" ShadowDepth="3" Opacity="0.5"/>
+                                    <DropShadowEffect BlurRadius="6" ShadowDepth="2" Opacity="0.55"/>
                                 </Border.Effect>
                                 <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
                                            TextAlignment="Center" Foreground="#2A1B10"
-                                           FontWeight="SemiBold" Margin="8"
+                                           FontSize="9" FontWeight="SemiBold" Margin="3"
                                            VerticalAlignment="Center"/>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </Grid>
+            </Border>
         </ScrollViewer>
 
-        <!-- Status bar -->
-        <Border Grid.Row="2" Background="#2A211B">
-            <Grid Margin="16,6">
+        <!-- Status: hidden unless importing / downloading / a problem. -->
+        <Border Grid.Row="1" Background="#2A211B"
+                Visibility="{Binding ShowStatus, Converter={StaticResource BoolToVisibility}}">
+            <Grid Margin="14,6">
                 <TextBlock Text="{Binding Status}" Foreground="#C8B89C" VerticalAlignment="Center"/>
                 <ProgressBar Width="120" Height="6" IsIndeterminate="True"
                              HorizontalAlignment="Right"

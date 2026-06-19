@@ -19,6 +19,9 @@ packages/
 # Local-only planning / design notes (never pushed — public repo)
 local-notes/
 
+# Secrets — API dev credentials (never committed; see Secrets.cs.template)
+**/Secrets.cs
+
 # OS
 Thumbs.db
 desktop.ini

@@ -5,7 +5,8 @@ using EmuDOS.Services;
 
 namespace EmuDOS.ViewModels;
 
-/// <summary>The shelf: the imported library plus drop-to-import.</summary>
+/// <summary>The library: the imported games plus drop-to-import. Status is surfaced only
+/// while importing/downloading or on a problem — otherwise the shelf has the whole window.</summary>
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly AppServices _services;
@@ -15,6 +16,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _showStatus;
 
     public MainViewModel(AppServices services)
     {
@@ -29,33 +33,47 @@ public sealed partial class MainViewModel : ObservableObject
         Games.Clear();
         foreach (var game in _services.Library.GetGames())
             Games.Add(new GameTile(game));
+    }
 
-        Status = Games.Count == 0
-            ? "Drop a DOS game folder or archive here to begin."
-            : $"{Games.Count} game{(Games.Count == 1 ? "" : "s")} on the shelf.";
+    /// <summary>Show a transient status (import/download/problem).</summary>
+    public void Report(string message, bool busy)
+    {
+        Status = message;
+        IsBusy = busy;
+        ShowStatus = true;
+    }
+
+    /// <summary>Hide the status bar (idle).</summary>
+    public void ClearStatus()
+    {
+        IsBusy = false;
+        ShowStatus = false;
     }
 
     /// <summary>Import each dropped path (folder/archive) and refresh the shelf.</summary>
     public async Task ImportPathsAsync(IEnumerable<string> paths)
     {
-        IsBusy = true;
-        try
+        bool hadError = false;
+        foreach (var path in paths)
         {
-            foreach (var path in paths)
+            var name = Path.GetFileName(path.TrimEnd('\\', '/'));
+            Report($"Importing {name}…", busy: true);
+            var result = await _services.Import.ImportAsync(path);
+            if (result.Success && result.GameboxPath is not null)
             {
-                Status = $"Importing {Path.GetFileName(path.TrimEnd('\\', '/'))}…";
-                var result = await _services.Import.ImportAsync(path);
-                if (result.Success && result.GameboxPath is not null)
-                    _services.Library.UpsertFromGamebox(result.GameboxPath);
-                else
-                    Status = $"Couldn't import {Path.GetFileName(path)}: {result.Error}";
+                _services.Library.UpsertFromGamebox(result.GameboxPath);
             }
+            else
+            {
+                Report($"Couldn't import {name}: {result.Error}", busy: false);
+                hadError = true;
+            }
+        }
 
-            LoadLibrary();
-        }
-        finally
-        {
+        LoadLibrary();
+        if (!hadError)
+            ClearStatus();
+        else
             IsBusy = false;
-        }
     }
 }
