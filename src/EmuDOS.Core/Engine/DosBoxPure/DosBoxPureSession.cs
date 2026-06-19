@@ -108,24 +108,14 @@ public sealed class DosBoxPureSession : IDosSession
             string loadTarget;
             if (_instance.Profile.SourceMedia == SourceMediaType.Iso)
             {
-                // Loading a .conf runs as plain DOSBox (no union C:). Mount the content as C: and the
-                // disc image as a CD-ROM on D: — both via host paths, which MOUNT resolves directly.
-                var disc = Directory.EnumerateFiles(_instance.ContentPath)
+                // The dosbox_pure way for CD games: load the disc image itself as content. The core
+                // mounts it as the CD (D:) and provides a save-backed writable C: for the install —
+                // far simpler and more robust than fighting IMGMOUNT against its union C: drive.
+                loadTarget = Directory.EnumerateFiles(_instance.ContentPath)
                     .FirstOrDefault(f => f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
                                       || f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)
-                                      || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase));
-
-                var conf = new System.Text.StringBuilder();
-                conf.AppendLine("[autoexec]");
-                conf.AppendLine($"mount c \"{_instance.ContentPath}\"");
-                conf.AppendLine("c:");
-                if (disc is not null)
-                    // IMGMOUNT (not MOUNT) for an image file; relative name resolves on the C: drive,
-                    // which is a plain local drive in .conf mode — so the union no longer blocks it.
-                    conf.AppendLine($"IMGMOUNT D: \"{Path.GetFileName(disc)}\" -t iso");
-
-                loadTarget = Path.Combine(_instance.GameboxPath, "emudos.conf");
-                File.WriteAllText(loadTarget, conf.ToString());
+                                      || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase))
+                    ?? _instance.ContentPath;
             }
             else
             {
