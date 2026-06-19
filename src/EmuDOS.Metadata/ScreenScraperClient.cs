@@ -48,6 +48,28 @@ public sealed partial class ScreenScraperClient
         return null;
     }
 
+    /// <summary>
+    /// Verify the configured user login (with the dev creds) via <c>ssuserInfos.php</c>.
+    /// Returns true only when ScreenScraper recognises the account.
+    /// </summary>
+    public async Task<bool> ValidateLoginAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await _http.GetAsync($"{BaseUrl}ssuserInfos.php?{Auth()}", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                return false;
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var doc = JsonNode.Parse(body);
+            return (doc?["response"]?["ssuser"] ?? doc?["ssuser"]) is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>Download an image URL to bytes, or null on failure.</summary>
     public async Task<byte[]?> DownloadAsync(string url, CancellationToken cancellationToken = default)
     {

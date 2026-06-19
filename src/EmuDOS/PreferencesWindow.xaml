@@ -1,0 +1,51 @@
+<Window x:Class="EmuDOS.PreferencesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EmuDOS Preferences" Height="500" Width="560"
+        Background="#1F1A16" WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize" MinHeight="400" MinWidth="460">
+
+    <TabControl Background="#1F1A16" BorderThickness="0" Padding="0">
+        <TabItem Header="Snaps">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="22,18">
+                    <TextBlock Text="ScreenScraper" FontSize="16" FontWeight="SemiBold"
+                               Foreground="#E8DCC8" Margin="0,0,0,4"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#A89A86" Margin="0,0,0,10"
+                               Text="Log in with your screenscraper.fr account for higher box-art download limits. (Optional — basic art works without it.)"/>
+
+                    <TextBlock Text="Username" Foreground="#C8B89C" Margin="0,2,0,3"/>
+                    <TextBox x:Name="SsUser" Padding="6,5" Background="#2C2520"
+                             Foreground="#E8DCC8" BorderBrush="#473C32"/>
+
+                    <TextBlock Text="Password" Foreground="#C8B89C" Margin="0,10,0,3"/>
+                    <PasswordBox x:Name="SsPass" Padding="6,5" Background="#2C2520"
+                                 Foreground="#E8DCC8" BorderBrush="#473C32"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button x:Name="SsLogin" Content="Log in" Padding="18,5" Click="OnLoginScreenScraper"/>
+                        <TextBlock x:Name="SsStatus" VerticalAlignment="Center" Margin="14,0,0,0"
+                                   Foreground="#A89A86"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,22" Background="#3A2F27"/>
+
+                    <TextBlock Text="SteamGridDB" FontSize="16" FontWeight="SemiBold"
+                               Foreground="#E8DCC8" Margin="0,0,0,4"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#A89A86" Margin="0,0,0,10"
+                               Text="Paste your API key from steamgriddb.com — used as a fallback art source for games ScreenScraper doesn't have."/>
+
+                    <TextBlock Text="API Key" Foreground="#C8B89C" Margin="0,2,0,3"/>
+                    <TextBox x:Name="SgdbKey" Padding="6,5" Background="#2C2520"
+                             Foreground="#E8DCC8" BorderBrush="#473C32"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button x:Name="SgdbLogin" Content="Log in" Padding="18,5" Click="OnLoginSteamGridDb"/>
+                        <TextBlock x:Name="SgdbStatus" VerticalAlignment="Center" Margin="14,0,0,0"
+                                   Foreground="#A89A86"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
+</Window>

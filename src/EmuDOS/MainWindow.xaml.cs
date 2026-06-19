@@ -25,6 +25,12 @@ public partial class MainWindow : Window
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
+    private void OnPreferences(object sender, RoutedEventArgs e)
+    {
+        var services = ((App)Application.Current).Services;
+        new PreferencesWindow(services) { Owner = this }.ShowDialog();
+    }
+
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
         if (Vm is null)
@@ -193,6 +199,9 @@ public partial class MainWindow : Window
             : DragDropEffects.None;
         e.Handled = true;
     }
+
+    /// <summary>Re-attempt covers for games still missing one (after an art login/key change).</summary>
+    public Task RefetchMissingArtAsync() => Vm?.FetchMissingArtAsync() ?? Task.CompletedTask;
 
     /// <summary>Launch the first game on the shelf (used by the auto-play dev hook).</summary>
     public async Task PlayFirstAsync()

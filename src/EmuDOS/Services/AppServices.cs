@@ -14,9 +14,13 @@ namespace EmuDOS.Services;
 /// </summary>
 public sealed class AppServices
 {
+    private readonly HttpClient _screenScraperHttp;
+
     public AppServices()
     {
         Paths = new AppPaths();
+        SettingsStore = new SettingsStore(Paths);
+        Settings = SettingsStore.Load();
         Store = new GameboxStore();
         Library = new LibraryDatabase(Paths, Store);
         Catalog = new CatalogDatabase(System.IO.Path.Combine(Paths.CatalogDir, "catalog.db"));
@@ -24,13 +28,19 @@ public sealed class AppServices
         Import = new ImportPipeline(Paths, Store, Resolver);
         Downloads = new DownloadService(new HttpClient(), Paths);
 
-        var ssHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        ssHttp.DefaultRequestHeaders.Add("User-Agent", "EmuDOS/1.0");
-        // Anonymous (dev-cred) access for now; the Accounts tab can supply a user login later.
-        Art = new ArtService(new ScreenScraperClient(ssHttp, string.Empty, string.Empty));
+        _screenScraperHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        _screenScraperHttp.DefaultRequestHeaders.Add("User-Agent", "EmuDOS/1.0");
+        SnapsLog = new AppLog(Paths, "snaps.log");
+        Art = BuildArtService();
     }
 
     public AppPaths Paths { get; }
+
+    public AppLog SnapsLog { get; }
+
+    public UserSettings Settings { get; }
+
+    public SettingsStore SettingsStore { get; }
 
     public GameboxStore Store { get; }
 
@@ -44,5 +54,34 @@ public sealed class AppServices
 
     public DownloadService Downloads { get; }
 
-    public ArtService Art { get; }
+    public ArtService Art { get; private set; }
+
+    /// <summary>Rebuild the art service after the ScreenScraper login changes.</summary>
+    public void ReloadArtService() => Art = BuildArtService();
+
+    /// <summary>Verify a ScreenScraper login; logs the result.</summary>
+    public async Task<bool> ValidateScreenScraperAsync(string user, string password)
+    {
+        var ok = await new ScreenScraperClient(_screenScraperHttp, user, password).ValidateLoginAsync();
+        SnapsLog.Info($"ScreenScraper login test for '{user}': {(ok ? "SUCCESS" : "FAILED")}");
+        return ok;
+    }
+
+    /// <summary>Verify a SteamGridDB API key; logs the result.</summary>
+    public async Task<bool> ValidateSteamGridDbAsync(string apiKey)
+    {
+        var ok = await new SteamGridDbClient(_screenScraperHttp, apiKey).ValidateKeyAsync();
+        SnapsLog.Info($"SteamGridDB key test: {(ok ? "SUCCESS" : "FAILED")}");
+        return ok;
+    }
+
+    private ArtService BuildArtService()
+    {
+        var screenScraper = new ScreenScraperClient(
+            _screenScraperHttp, Settings.ScreenScraperUser, Settings.ScreenScraperPassword);
+        var steamGridDb = string.IsNullOrWhiteSpace(Settings.SteamGridDbKey)
+            ? null
+            : new SteamGridDbClient(_screenScraperHttp, Settings.SteamGridDbKey);
+        return new ArtService(screenScraper, steamGridDb);
+    }
 }
