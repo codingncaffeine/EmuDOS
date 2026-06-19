@@ -138,11 +138,10 @@ public partial class MainWindow : Window
         var names = selected.Count <= 3
             ? string.Join(", ", selected.Select(g => g.Title))
             : $"{selected.Count} games";
-        var confirm = MessageBox.Show(
-            $"Remove {names} from your library?\n\nThe box art is kept, so re-importing won't re-download it.",
-            "Delete from library", MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
-        if (confirm == MessageBoxResult.Yes)
+        if (ConfirmDialog.Show(this, "Delete from library",
+                $"Remove {names} from your library?\n\nThe box art is kept, so re-importing won't re-download it.",
+                "Delete"))
             Vm.DeleteGames(selected);
     }
 

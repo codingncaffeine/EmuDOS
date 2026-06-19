@@ -18,4 +18,12 @@ public partial class Mt32LcdWindow : Window
         if (e.ButtonState == MouseButtonState.Pressed)
             DragMove();
     }
+
+    // Scroll wheel resizes the whole unit; the Viewbox keeps the aspect ratio and the window
+    // auto-sizes to the scaled content.
+    private void OnScaleWheel(object sender, MouseWheelEventArgs e)
+    {
+        Scaler.Width = Math.Clamp(Scaler.Width + (e.Delta > 0 ? 60 : -60), 320, 1184);
+        e.Handled = true;
+    }
 }

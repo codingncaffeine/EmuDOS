@@ -16,8 +16,9 @@
     <Resource Include="..\..\Assets\bookshelf2.png" Link="Assets\bookshelf2.png" />
   </ItemGroup>
 
-  <!-- DotGothic16 (SIL OFL) for the MT-32 LCD display. -->
+  <!-- MT-32 LCD assets: the Roland unit photo + (legacy) DotGothic16 font. -->
   <ItemGroup>
+    <Resource Include="Assets\roland.png" />
     <Resource Include="Assets\Fonts\DotGothic16-Regular.ttf" />
   </ItemGroup>
 
