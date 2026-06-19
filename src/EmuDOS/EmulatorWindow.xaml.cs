@@ -264,8 +264,55 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             isNew = _keysDown.Add(key); // false when this is an auto-repeat
 
         if (isNew)
-            _keyEvents.Enqueue(new KeyEvent(true, (uint)key, 0, Modifiers()));
+        {
+            bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            bool caps = Keyboard.IsKeyToggled(Key.CapsLock);
+            _keyEvents.Enqueue(new KeyEvent(true, (uint)key, CharFor(key, shift, caps), Modifiers()));
+        }
+
         e.Handled = true;
+    }
+
+    /// <summary>The typed character for a key (US layout) — needed for text prompts like the
+    /// manual-lookup copy-protection screens. 0 for non-printable keys.</summary>
+    private static uint CharFor(DosKey key, bool shift, bool caps)
+    {
+        if (key is >= DosKey.A and <= DosKey.Z)
+        {
+            char c = (char)('a' + (key - DosKey.A));
+            return shift ^ caps ? char.ToUpperInvariant(c) : c;
+        }
+
+        if (key is >= DosKey.Keypad0 and <= DosKey.Keypad9)
+            return (uint)('0' + (key - DosKey.Keypad0));
+
+        if (key is >= DosKey.D0 and <= DosKey.D9)
+        {
+            const string digits = "0123456789";
+            const string shifted = ")!@#$%^&*(";
+            int i = key - DosKey.D0;
+            return shift ? shifted[i] : (uint)digits[i];
+        }
+
+        return key switch
+        {
+            DosKey.Space => ' ',
+            DosKey.Enter => '\r',
+            DosKey.Tab => '\t',
+            DosKey.Backspace => 8,
+            DosKey.Minus => shift ? '_' : (uint)'-',
+            DosKey.Equals => shift ? '+' : (uint)'=',
+            DosKey.Comma => shift ? '<' : (uint)',',
+            DosKey.Period => shift ? '>' : (uint)'.',
+            DosKey.Slash => shift ? '?' : (uint)'/',
+            DosKey.Semicolon => shift ? ':' : (uint)';',
+            DosKey.Apostrophe => shift ? '"' : (uint)'\'',
+            DosKey.LeftBracket => shift ? '{' : (uint)'[',
+            DosKey.RightBracket => shift ? '}' : (uint)']',
+            DosKey.Backslash => shift ? '|' : (uint)'\\',
+            DosKey.Backquote => shift ? '~' : (uint)'`',
+            _ => 0,
+        };
     }
 
     private void OnKeyUp(object sender, KeyEventArgs e)

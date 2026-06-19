@@ -179,14 +179,43 @@ public sealed class DosBoxPureSession : IDosSession
 
     // Runs on the core thread, once per frame, before input is read: latch the mouse and push
     // any queued key transitions into the core's keyboard callback.
+    private const int MinKeyHoldFrames = 4;
+    private readonly Dictionary<uint, int> _keyHoldFrames = new();
+    private readonly Dictionary<uint, KeyEvent> _pendingUps = new();
+
+    // Runs on the emulation thread, once per frame (single producer for the core's lock-free
+    // event queue). Keys are held down for a few frames before their release is delivered, so a
+    // game polling the keyboard in a tight loop (copy-protection screens) can't miss a quick tap.
     private void PollInput()
     {
         _mouse = _host.Input.PollMouse();
+
         while (_host.Input.TryDequeueKey(out var key))
         {
-            _core?.SendKeyEvent(key.Down, key.KeyCode, key.Character, key.Modifiers);
-            Interlocked.Increment(ref _keysSent);
+            if (key.Down)
+            {
+                if (_pendingUps.Remove(key.KeyCode, out var prior)) // close a still-pending release first
+                    _core?.SendKeyEvent(false, prior.KeyCode, prior.Character, prior.Modifiers);
+                _core?.SendKeyEvent(true, key.KeyCode, key.Character, key.Modifiers);
+                Interlocked.Increment(ref _keysSent);
+                _keyHoldFrames[key.KeyCode] = MinKeyHoldFrames;
+            }
+            else
+            {
+                _pendingUps[key.KeyCode] = key; // defer the release until the key has been held a few frames
+            }
         }
+
+        foreach (var code in _keyHoldFrames.Keys.ToList())
+            if (--_keyHoldFrames[code] <= 0)
+                _keyHoldFrames.Remove(code);
+
+        foreach (var (code, up) in _pendingUps.ToList())
+            if (!_keyHoldFrames.ContainsKey(code))
+            {
+                _core?.SendKeyEvent(false, up.KeyCode, up.Character, up.Modifiers);
+                _pendingUps.Remove(code);
+            }
     }
 
     private readonly Audio.MidiMonitor _midi = new();

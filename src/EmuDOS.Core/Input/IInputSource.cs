@@ -12,8 +12,8 @@ public interface IInputSource
     bool IsKeyDown(DosKey key);
 
     /// <summary>
-    /// Take the next queued key transition (press/release) for cores that consume keyboard via
-    /// the libretro keyboard callback. Returns false when the queue is empty. Drained per frame.
+    /// Take the next queued key transition (press/release). The engine drains these on its own
+    /// thread each frame and feeds them to the core's keyboard callback. False when empty.
     /// </summary>
     bool TryDequeueKey(out KeyEvent keyEvent);
 

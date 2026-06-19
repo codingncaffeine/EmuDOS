@@ -1,3 +1,4 @@
+using EmuDOS.Core.Input;
 using EmuDOS.Core.Model;
 
 namespace EmuDOS.Core.Engine;
