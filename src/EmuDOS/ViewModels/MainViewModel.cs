@@ -67,29 +67,66 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public async Task HandleDropAsync(IEnumerable<string> paths)
     {
-        var all = paths.ToList();
-        var systemFiles = all.Where(p => File.Exists(p) && Core.Audio.SystemFileInstaller.IsSystemFile(p)).ToList();
+        var installed = new List<string>();
+        var toImport = new List<string>();
 
-        if (systemFiles.Count > 0)
+        foreach (var path in paths)
         {
-            var installed = new List<string>();
-            foreach (var file in systemFiles)
+            if (File.Exists(path) && Core.Audio.SystemFileInstaller.IsSystemFile(path))
             {
-                var description = _services.SystemFiles.Install(file);
-                if (description is not null)
-                    installed.Add(description);
+                Install(path, installed);
             }
-
-            if (installed.Count > 0)
+            else if (Directory.Exists(path))
             {
-                var ready = _services.SystemFiles.HasMt32 ? " MT-32 is ready." : string.Empty;
-                Report($"Installed {string.Join(", ", installed)}.{ready}", busy: false);
+                // Look inside the folder for ROMs/SoundFonts (e.g. a dropped "MT-32 ROMs" folder).
+                // Only recognised ROMs (by size) install; if none, it's a normal game folder.
+                int before = installed.Count;
+                foreach (var file in SystemFilesIn(path))
+                    Install(file, installed);
+
+                if (installed.Count == before)
+                    toImport.Add(path);
+            }
+            else
+            {
+                toImport.Add(path);
             }
         }
 
-        var content = all.Except(systemFiles).ToList();
-        if (content.Count > 0)
-            await ImportPathsAsync(content);
+        if (installed.Count > 0)
+        {
+            var ready = _services.SystemFiles.HasMt32 ? " MT-32 is ready." : string.Empty;
+            Report($"Installed {string.Join(", ", installed.Distinct())}.{ready}", busy: false);
+            _services.SystemLog.Info($"Drop complete: {installed.Count} file(s). HasMt32={_services.SystemFiles.HasMt32}");
+        }
+
+        if (toImport.Count > 0)
+            await ImportPathsAsync(toImport);
+    }
+
+    private void Install(string file, List<string> installed)
+    {
+        var description = _services.SystemFiles.Install(file);
+        if (description is not null)
+        {
+            installed.Add(description);
+            _services.SystemLog.Info($"Installed {description}  <-  {file}");
+        }
+        else
+        {
+            _services.SystemLog.Info($"Ignored (not a recognised ROM/SoundFont size): {file}");
+        }
+    }
+
+    private static IEnumerable<string> SystemFilesIn(string directory)
+    {
+        IEnumerable<string> Find(string pattern)
+        {
+            try { return Directory.EnumerateFiles(directory, pattern, SearchOption.AllDirectories); }
+            catch { return []; }
+        }
+
+        return Find("*.rom").Concat(Find("*.sf2"));
     }
 
     /// <summary>Import each dropped path (folder/archive) and refresh the shelf.</summary>

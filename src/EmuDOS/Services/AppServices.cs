@@ -34,12 +34,15 @@ public sealed class AppServices
         _screenScraperHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         _screenScraperHttp.DefaultRequestHeaders.Add("User-Agent", "EmuDOS/1.0");
         SnapsLog = new AppLog(Paths, "snaps.log");
+        SystemLog = new AppLog(Paths, "system.log");
         Art = BuildArtService();
     }
 
     public AppPaths Paths { get; }
 
     public AppLog SnapsLog { get; }
+
+    public AppLog SystemLog { get; }
 
     public UserSettings Settings { get; }
 
