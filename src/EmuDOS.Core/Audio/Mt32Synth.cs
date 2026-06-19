@@ -38,8 +38,16 @@ public sealed partial class Mt32Synth : IDisposable
     private readonly Lock _lcdGate = new();
     private string _lcd = string.Empty;
     private long _bytesFed;
+    private int _sysexCount;
+    private string _lastRolandHeader = string.Empty;
 
     public long BytesFed => _bytesFed;
+
+    /// <summary>Diagnostic: how many SysEx messages seen + the last Roland address bytes.</summary>
+    public string SysexInfo
+    {
+        get { lock (_lcdGate) return $"sysex={_sysexCount} rolandHdr=[{_lastRolandHeader}]"; }
+    }
 
     private Mt32Synth(nint handle)
     {
@@ -125,13 +133,6 @@ public sealed partial class Mt32Synth : IDisposable
         }
     }
 
-    /// <summary>Play a sustained C-major chord (part 1) to prove the synth is audible, game-independent.</summary>
-    public void PlayTestTone()
-    {
-        foreach (uint note in (uint[])[60, 64, 67]) // C E G on MIDI channel 2 (MT-32 part 1)
-            mt32_play_msg(_handle, 0x91u | (note << 8) | (110u << 16));
-    }
-
     /// <summary>Render <paramref name="frames"/> interleaved stereo samples (buffer length >= frames*2).</summary>
     public void Render(short[] buffer, int frames)
     {
@@ -143,6 +144,16 @@ public sealed partial class Mt32Synth : IDisposable
     {
         var bytes = _sysex.ToArray();
         mt32_play_sysex(_handle, bytes, bytes.Length);
+
+        if (bytes.Length >= 8 && bytes[1] == 0x41) // a Roland message — capture its address for diagnostics
+        {
+            lock (_lcdGate)
+            {
+                _sysexCount++;
+                _lastRolandHeader = $"{bytes[3]:X2} {bytes[4]:X2} {bytes[5]:X2} {bytes[6]:X2} {bytes[7]:X2}";
+            }
+        }
+
         ParseLcd(bytes);
     }
 

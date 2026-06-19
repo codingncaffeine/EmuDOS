@@ -122,8 +122,6 @@ public sealed class DosBoxPureSession : IDosSession
             {
                 _core.Audio = MixMt32;
                 _core.MidiByte = _synth.FeedByte;
-                if (Environment.GetEnvironmentVariable("EMUDOS_MT32_TEST") == "1")
-                    _synth.PlayTestTone();
             }
             else
             {
@@ -267,7 +265,7 @@ public sealed class DosBoxPureSession : IDosSession
     public string InputDiagnostics =>
         $"keysSent={Interlocked.Read(ref _keysSent)} kbQ={Interlocked.Read(ref _kbQueries)} "
         + $"padQ={Interlocked.Read(ref _padQueries)} mouseQ={Interlocked.Read(ref _mouseQueries)} "
-        + $"otherQ={Interlocked.Read(ref _otherQueries)} | midiBytes={_synth?.BytesFed ?? _midi.ByteCount} lcd='{_synth?.Lcd ?? _midi.Lcd}' synth={(_synth is null ? "off" : _synth.SampleRate + "Hz")}";
+        + $"otherQ={Interlocked.Read(ref _otherQueries)} | midiBytes={_synth?.BytesFed ?? _midi.ByteCount} lcd='{_synth?.Lcd ?? _midi.Lcd}' synth={(_synth is null ? "off" : _synth.SampleRate + "Hz")} {_synth?.SysexInfo}";
 
     private short QueryInput(uint port, uint device, uint index, uint id)
     {
