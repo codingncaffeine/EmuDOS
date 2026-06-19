@@ -63,6 +63,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             ImportClassification classification;
             string? chosen;
             GameProfile profile;
+            string? warning = null;
 
             if (discMount is not null)
             {
@@ -70,6 +71,14 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 executables = [];
                 chosen = null;
                 classification = ImportClassification.NeedsInstall;
+
+                if (discMount.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
+                    && !IsIso9660(Path.Combine(box.ContentDir, discMount)))
+                {
+                    warning = $"'{title}' is a non-ISO9660 disc image (e.g. UDF) — the DOS emulator "
+                            + "can only read standard ISO9660 CDs, so this one won't mount.";
+                }
+
                 profile = new GameProfile
                 {
                     Title = title,
@@ -109,6 +118,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 Classification = classification,
                 Executables = executables,
                 ChosenExecutable = chosen,
+                Warning = warning,
             };
         }
         catch (Exception ex)
@@ -122,6 +132,30 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
 
     private static bool IsDiscImage(string path) =>
         DiscImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    // A raw ISO has its volume descriptors at sector 16+ (2048 bytes each), each tagged "CD001".
+    // No CD001 means a non-ISO9660 image (e.g. UDF) that dosbox can't read. Unknown -> assume OK.
+    private static bool IsIso9660(string isoPath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(isoPath);
+            var buffer = new byte[6];
+            for (long sector = 16; sector <= 32; sector++)
+            {
+                stream.Seek(sector * 2048, SeekOrigin.Begin);
+                if (stream.Read(buffer, 0, 6) < 6)
+                    break;
+                if (buffer[1] == 'C' && buffer[2] == 'D' && buffer[3] == '0' && buffer[4] == '0' && buffer[5] == '1')
+                    return true;
+            }
+            return false;
+        }
+        catch
+        {
+            return true; // can't read it for some reason — don't cry wolf
+        }
+    }
 
     // Copy a disc image into the content folder under a short, space-free 8.3-friendly name —
     // DOS/dosbox can't open an image with a long, spaced filename. Returns the name to IMGMOUNT.

@@ -134,6 +134,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         bool hadError = false;
         string? installHint = null;
+        string? warning = null;
         foreach (var path in paths)
         {
             var name = Path.GetFileName(path.TrimEnd('\\', '/'));
@@ -142,7 +143,9 @@ public sealed partial class MainViewModel : ObservableObject
             if (result.Success && result.GameboxPath is not null)
             {
                 _services.Library.UpsertFromGamebox(result.GameboxPath);
-                if (result.Classification == Core.Import.ImportClassification.NeedsInstall)
+                if (result.Warning is not null)
+                    warning = result.Warning;
+                else if (result.Classification == Core.Import.ImportClassification.NeedsInstall)
                     installHint = $"Imported {name} — open it to install (the disc is mounted as D:).";
             }
             else
@@ -155,6 +158,8 @@ public sealed partial class MainViewModel : ObservableObject
         LoadLibrary();
         if (hadError)
             IsBusy = false;
+        else if (warning is not null)
+            Report(warning, busy: false);
         else if (installHint is not null)
             Report(installHint, busy: false);
         else

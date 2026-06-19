@@ -32,4 +32,7 @@ public sealed record ImportResult
     public string? ChosenExecutable { get; init; }
 
     public string? Error { get; init; }
+
+    /// <summary>A non-fatal note to surface to the user (e.g. an unsupported disc format).</summary>
+    public string? Warning { get; init; }
 }
