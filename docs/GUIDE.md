@@ -7,6 +7,8 @@ Everything you can do in EmuDOS, and how.
 - [The shelf](#the-shelf)
 - [Playing a game](#playing-a-game)
 - [Mouse: lock and sensitivity](#mouse-lock-and-sensitivity)
+- [Screenshots and recording](#screenshots-and-recording)
+- [Hotkeys](#hotkeys)
 - [Picking the right program to run](#picking-the-right-program-to-run)
 - [Per-game settings](#per-game-settings)
 - [Box art](#box-art)
@@ -37,9 +39,15 @@ You can drop **multiple** items at once. You can also drop a **folder of MT-32 R
 
 ### CD games (disc images)
 
-Drop a **`.iso`**, **`.cue`**/**`.bin`**, or **`.chd`** and EmuDOS imports it as a CD game: the image is mounted as drive **D:** every launch. The first launch boots to a DOS prompt with a hint — switch to the disc (`D:`) and run its installer (`SETUP` or `INSTALL`). The game installs onto the writable **C:** drive; afterward, use **Run ▸** once to pick the installed program and plain clicks launch it (with the CD still mounted on D:).
+Drop a **`.iso`**, **`.cue`**/**`.bin`**, or **`.chd`** and EmuDOS imports it as a CD game, mounting the disc as a CD-ROM on launch. Run the disc's installer (`SETUP` or `INSTALL`); the game installs onto a writable **C:** drive, and from then on it launches into the installed program.
 
-> EmuDOS runs **DOS** games. A disc for a **Windows** game (e.g. a Win95/98 title) generally won't install or run, because its installer is a Windows program, not a DOS one.
+**Multi-disc games** — select a game's discs (e.g. `Game (Disc 1).iso` and `Game (Disc 2).iso`) and **drop them together**. EmuDOS imports them as a single game with all discs attached; swap between them from the emulator's start menu while playing.
+
+> Non-bootable preservation rips and **UDF** images can't be read by the DOS emulator — EmuDOS warns you on import if a disc isn't a standard ISO9660 CD.
+
+### Windows games (advanced)
+
+EmuDOS runs **DOS**, but the DOSBox Pure core can also install and boot a real **Windows 9x**. With a *bootable* Windows install CD image, launch it and choose **[ Boot and Install New Operating System ]** from the start menu, pick a hard-disk size, and install Windows; the install persists. You can then add Windows game CDs to that box (right-click → **Add disc…**) and run them inside Windows. This is involved and needs a genuinely bootable install image — see the project notes if you go down this road.
 
 ---
 
@@ -69,20 +77,36 @@ Use the save-state controls to snapshot and restore your exact place in a game. 
 
 For games that use the mouse to look/turn:
 
-- **Middle-click** locks the mouse: the cursor hides and is held to the window, so you can turn continuously without the pointer escaping. **Middle-click again** (or **Alt-Tab**) to release it.
+- **Middle-click** locks the mouse: the cursor hides and is held to the window, so you can turn continuously without the pointer escaping. **Middle-click again** (or **Alt-Tab**) to release it. (You can also bind a key for this under **Preferences → Hotkeys**.) Locked motion uses raw mouse input, so it stays accurate and even in every direction.
 - **Scroll wheel** raises/lowers mouse sensitivity on the fly (a small readout appears at the top). DOS games don't use the wheel, so there's no conflict.
+
+---
+
+## Screenshots and recording
+
+- **F12** saves a screenshot.
+- **F9** starts and stops recording gameplay video. Recording needs **FFmpeg** — install it once from **Preferences → Downloads** (it's optional and not bundled).
+
+Under **Preferences → Media** you can set the save folders, the screenshot size (the game's native pixels, or the displayed window size), and the video quality (Low / Medium / High). A **● REC** badge shows while recording; the video encodes when you stop or close the game.
+
+---
+
+## Hotkeys
+
+**Preferences → Hotkeys** rebinds the screenshot, record, and mouse-lock keys — click a box and press the key you want (Esc resets it to the default). Middle-click always toggles mouse lock regardless.
 
 ---
 
 ## Picking the right program to run
 
-EmuDOS guesses the program to launch on import, but DOS games sometimes have several executables. To choose:
+EmuDOS auto-detects the game program on launch — it prefers an executable whose name matches the game's title, then the **largest** one (the game engine dwarfs little config/registration helpers), and it skips installers and DOS extenders (DOS/4GW). For most games you just click and play.
 
-- **Right-click → Run ▸** lists the programs found in the game (and any you've used before). Pick one to run it.
-- The program you pick becomes the **remembered default**, so plain clicks launch it from then on. (Picking a `SETUP`/`INSTALL`/`CONFIG` program is treated as a one-off and won't replace the game.)
-- **Right-click → Open in DOS** boots straight to the `C:\` prompt, where you can run a game's `SETUP.EXE`, browse files, or start a program by hand.
+When it guesses wrong, there are two ways to set it straight, and both **stick**:
 
-If a game opens to a DOS prompt instead of starting, use **Run ▸** to pick the actual launcher (often a `.BAT`).
+- **Right-click → Choose program…** opens a clickable list of every program in the game (the game, its `SETUP`, etc.). Pick one. A game program becomes the **default**; a `SETUP`/`INSTALL`/`CONFIG` tool just runs once, so "go fix the sound" never replaces the game.
+- **Right-click → Open in DOS** boots to the `C:\` prompt. Whatever you run there — the game, a launcher `.BAT`, the installer — **EmuDOS remembers as the default** for next time.
+
+So even an awkward game only needs sorting out once.
 
 ---
 
@@ -159,6 +183,7 @@ Both are remembered per game, stored in the gamebox:
 
 - **DOSBox Pure core** — required; the DOS emulator.
 - **Game catalog** — recommended; recognizes games and applies settings on import.
+- **FFmpeg** — optional; only needed to record gameplay video (F9).
 - **Roland MT-32 ROMs** — *detected, not downloaded* (you supply these; see above).
 
 The MT-32 synth itself ships with EmuDOS — there's nothing to download for it beyond the ROMs.
@@ -174,18 +199,20 @@ Each game is a **gamebox** — a self-contained folder under your data directory
   profile.json   curated + your settings
   state.json     window size, remembered program
   content/       the game files (mounted as C:)
-  media/         box art, manuals, screenshots
+  media/         box art and manuals
   saves/         save data and save states
 ```
 
 Because a gamebox is self-contained, **backing up or moving the folder moves the whole game**. The library database is only a rebuildable index over these folders.
+
+Screenshots and recorded videos save to the folders set in **Preferences → Media** (by default, `Screenshots/` and `Videos/` in your data directory).
 
 ---
 
 ## Troubleshooting
 
 **Game opens to a DOS prompt instead of starting.**
-The guessed program wasn't the launcher. Right-click → **Run ▸** and pick the real one (often a `.BAT`). Your pick becomes the default.
+The auto-detected program wasn't the launcher. Right-click → **Choose program…** and pick the real one (often a `.BAT`), or just run it once via **Open in DOS** — either way EmuDOS remembers it as the default.
 
 **No sound.**
 Open **Preferences → Game Options** and check the **Sound card** / **MIDI device**. Some games also need their own `SETUP` run (via **Open in DOS**) to select a sound device.
