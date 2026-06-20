@@ -86,6 +86,28 @@ public class DosBoxPureAdapterTests
     }
 
     [Fact]
+    public void Executable_in_a_subfolder_is_launched_from_that_folder()
+    {
+        var profile = new GameProfile { Launch = new LaunchSpec { Executable = @"ABUSE\ABUSE.EXE" } };
+
+        var bat = DosBoxPureAdapter.BuildAutoexecBat(profile);
+        var lines = bat.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Assert.Contains(@"@CD \ABUSE", lines);
+        Assert.Equal("@ABUSE.EXE", lines[^1]);
+    }
+
+    [Fact]
+    public void Root_executable_runs_without_a_cd()
+    {
+        var bat = DosBoxPureAdapter.BuildAutoexecBat(
+            new GameProfile { Launch = new LaunchSpec { Executable = "INSTALL.EXE" } });
+
+        Assert.DoesNotContain("@CD ", bat);
+        Assert.Contains("@INSTALL.EXE", bat);
+    }
+
+    [Fact]
     public void Joystick_type_emits_config_line_when_not_auto()
     {
         var ch = DosBoxPureAdapter.BuildAutoexecBat(

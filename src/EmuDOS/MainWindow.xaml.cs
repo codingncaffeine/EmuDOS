@@ -137,6 +137,31 @@ public partial class MainWindow : Window
         return found;
     }
 
+    /// <summary>The most likely game program among the content's executables — preferring a name that
+    /// matches the game's title, then one installed into a subfolder — skipping installers/setup tools.</summary>
+    private static string? BestGameExecutable(string contentDir, string title)
+    {
+        var candidates = ScanExecutables(contentDir).Where(e => !IsSetupLike(e)).ToList();
+        if (candidates.Count == 0)
+            return null;
+
+        static string Key(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        var titleKey = Key(title);
+        if (titleKey.Length > 0)
+        {
+            var match = candidates.FirstOrDefault(e =>
+            {
+                var key = Key(Path.GetFileNameWithoutExtension(e));
+                return key.Length > 0 && (key.Contains(titleKey) || titleKey.Contains(key));
+            });
+            if (match is not null)
+                return match;
+        }
+
+        // An exe inside a subfolder is usually the installed game, vs a loose installer at the root.
+        return candidates.FirstOrDefault(e => e.Contains('\\')) ?? candidates[0];
+    }
+
     private static List<string> OrderedExecutables(GameUserState state, List<string> scanned)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -598,6 +623,18 @@ public partial class MainWindow : Window
             var configured = instance.Profile.Launch.Executable;
             var chosen = executableOverride
                 ?? (string.IsNullOrWhiteSpace(state.LastExecutable) ? configured : state.LastExecutable);
+
+            // Smart default: if we'd otherwise launch an installer (or have nothing configured) but the
+            // game is already installed, prefer the real program — the user shouldn't have to keep
+            // running the installer or hunt through the Run menu after a one-time install.
+            if (executableOverride is null && string.IsNullOrWhiteSpace(state.LastExecutable)
+                && (string.IsNullOrWhiteSpace(chosen) || IsSetupLike(chosen)))
+            {
+                var game = BestGameExecutable(Path.Combine(tile.Game.GameboxPath, "content"), tile.Title);
+                if (game is not null)
+                    chosen = game;
+            }
+
             if (!string.Equals(chosen, configured, StringComparison.OrdinalIgnoreCase))
                 instance = instance with
                 {

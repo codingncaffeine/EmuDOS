@@ -120,7 +120,18 @@ public static class DosBoxPureAdapter
 
         if (!string.IsNullOrWhiteSpace(profile.Launch.Executable))
         {
-            var line = profile.Launch.Executable!.Trim();
+            var exe = profile.Launch.Executable!.Trim().Replace('/', '\\');
+            int slash = exe.LastIndexOf('\\');
+            var dir = slash >= 0 ? exe[..slash].Trim('\\') : string.Empty;
+            var file = slash >= 0 ? exe[(slash + 1)..] : exe;
+
+            // Run the game FROM its own directory — most DOS games look for their data files in the
+            // current directory, so one installed into a subfolder (e.g. ABUSE\ABUSE.EXE) must be
+            // launched after cd-ing into it, not by path from C:\.
+            if (dir.Length > 0)
+                sb.AppendLine("@CD \\" + dir);
+
+            var line = file;
             if (!string.IsNullOrWhiteSpace(profile.Launch.Arguments))
                 line += " " + profile.Launch.Arguments!.Trim();
             sb.AppendLine("@" + line);
