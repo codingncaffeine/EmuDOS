@@ -10,4 +10,10 @@ public interface IImportPipeline
         string sourcePath,
         IProgress<ImportProgress>? progress = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Import several disc images of one game as a single multi-disc gamebox.</summary>
+    Task<ImportResult> ImportDiscSetAsync(
+        IReadOnlyList<string> discPaths,
+        IProgress<ImportProgress>? progress = null,
+        CancellationToken cancellationToken = default);
 }

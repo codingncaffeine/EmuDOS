@@ -110,6 +110,52 @@ public class ImportPipelineTests
         Assert.Contains(launch.PreCommands, c => c.Contains("IMGMOUNT D:") && c.Contains("disc.iso"));
     }
 
+    [Fact]
+    public void Strips_disc_markers_from_titles()
+    {
+        Assert.Equal("Quest for Glory", ImportPipeline.StripDiscMarker("Quest for Glory (Disc 1)"));
+        Assert.Equal("Quest for Glory", ImportPipeline.StripDiscMarker("Quest for Glory CD2"));
+        Assert.Equal("Quest for Glory", ImportPipeline.StripDiscMarker("Quest for Glory - Disk 3"));
+        Assert.Equal("Doom", ImportPipeline.StripDiscMarker("Doom"));
+    }
+
+    [Fact]
+    public void Groups_disc_images_of_one_game_into_a_set()
+    {
+        string[] paths =
+        [
+            @"C:\g\Quest (Disc 1).iso",
+            @"C:\g\Quest (Disc 2).iso",
+            @"C:\g\Other Game.iso",
+        ];
+
+        var sets = ImportPipeline.GroupDiscSets(paths).ToList();
+
+        Assert.Equal(2, sets.Count);
+        Assert.Contains(sets, s => s.Count == 2); // Quest's two discs together
+        Assert.Contains(sets, s => s.Count == 1); // the unrelated game alone
+    }
+
+    [Fact]
+    public async Task Multi_disc_bundle_imports_as_one_gamebox_with_all_discs()
+    {
+        var dir = TempDir();
+        var cd1 = Path.Combine(dir, "Big Game (Disc 1).iso");
+        var cd2 = Path.Combine(dir, "Big Game (Disc 2).iso");
+        File.WriteAllBytes(cd1, new byte[4096]);
+        File.WriteAllBytes(cd2, new byte[4096]);
+        var (pipeline, store) = NewPipeline();
+
+        var result = await pipeline.ImportDiscSetAsync([cd1, cd2]);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(ImportClassification.NeedsInstall, result.Classification);
+        var content = Path.Combine(result.GameboxPath!, "content");
+        Assert.True(File.Exists(Path.Combine(content, "Big Game (Disc 1).iso")));
+        Assert.True(File.Exists(Path.Combine(content, "Big Game (Disc 2).iso")));
+        Assert.Equal("Big Game", store.ReadProfile(result.GameboxPath!).Title);
+    }
+
     private static (ImportPipeline, GameboxStore) NewPipeline()
     {
         var paths = new AppPaths(Path.Combine(Path.GetTempPath(), "emudos-tests", Guid.NewGuid().ToString("N")));

@@ -73,6 +73,15 @@ public partial class MainWindow : Window
         menu.Items.Add(customArt);
         menu.Items.Add(manual);
 
+        // For disc-based games (e.g. an installed Windows machine), let the user add more discs —
+        // each shows up in dosbox_pure's start menu to mount as D: (swap CDs without leaving the OS).
+        if (IsDiscGame(tile))
+        {
+            var addDisc = new MenuItem { Header = "Add disc…" };
+            addDisc.Click += (_, _) => AddDisc(tile);
+            menu.Items.Add(addDisc);
+        }
+
         // A "Run" submenu of executables we've used before plus any found in the content, so the
         // user can pick the right one when the default launch doesn't land on a runnable program.
         var services = ((App)Application.Current).Services;
@@ -170,6 +179,56 @@ public partial class MainWindow : Window
         foreach (var c in Path.GetInvalidFileNameChars())
             name = name.Replace(c, '_');
         return name.Trim();
+    }
+
+    private static readonly string[] DiscExtensions = [".iso", ".cue", ".bin", ".chd"];
+
+    /// <summary>A disc-based gamebox — one whose content holds a CD image (the only kind the
+    /// .m3u8 disc-swap applies to).</summary>
+    private static bool IsDiscGame(GameTile tile)
+    {
+        var content = Path.Combine(tile.Game.GameboxPath, "content");
+        if (!Directory.Exists(content))
+            return false;
+        try
+        {
+            return Directory.EnumerateFiles(content)
+                .Any(f => DiscExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Copy a chosen disc image into the gamebox content so it joins the disc-swap menu.</summary>
+    private void AddDisc(GameTile tile)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = $"Add a disc to {tile.Title}",
+            Filter = "Disc images|*.iso;*.cue;*.bin;*.chd|All files|*.*",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            var content = Path.Combine(tile.Game.GameboxPath, "content");
+            Directory.CreateDirectory(content);
+            File.Copy(dialog.FileName, Path.Combine(content, Path.GetFileName(dialog.FileName)), overwrite: true);
+
+            // A .cue references .bin track files alongside it — bring them along too.
+            if (Path.GetExtension(dialog.FileName).Equals(".cue", StringComparison.OrdinalIgnoreCase))
+            {
+                var sourceDir = Path.GetDirectoryName(dialog.FileName)!;
+                foreach (var bin in Directory.EnumerateFiles(sourceDir, "*.bin"))
+                    File.Copy(bin, Path.Combine(content, Path.GetFileName(bin)), overwrite: true);
+            }
+
+            Vm?.Report($"Added {Path.GetFileName(dialog.FileName)} to {tile.Title} — launch it, then pick the disc in the start menu to mount it as D:.", busy: false);
+        }
+        catch (Exception ex)
+        {
+            Vm?.Report($"Couldn't add disc: {ex.Message}", busy: false);
+        }
     }
 
     private void SetCustomArt(GameTile tile)

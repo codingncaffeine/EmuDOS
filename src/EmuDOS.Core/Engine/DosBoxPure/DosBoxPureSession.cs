@@ -108,18 +108,23 @@ public sealed class DosBoxPureSession : IDosSession
             string loadTarget;
             if (_instance.Profile.SourceMedia == SourceMediaType.Iso)
             {
-                // Load the disc via an .m3u8 playlist: dosbox_pure then mounts a CD image as D:
+                // Load the disc(s) via an .m3u8 playlist: dosbox_pure then mounts a CD image as D:
                 // (a CD loaded directly becomes the C: boot drive instead). A CD on D: is what makes
                 // the core detect a bootable disc and leaves C: free/writable — so the start menu
                 // offers "[Boot and Install New Operating System]" and the install has somewhere to go.
-                var disc = Directory.EnumerateFiles(_instance.ContentPath)
-                    .FirstOrDefault(f => f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
-                                      || f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)
-                                      || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase));
-                if (disc is not null)
+                // Every disc in the box is listed, so extra discs (e.g. game CDs added to an installed
+                // Windows machine) show up in the core's disc-swap menu to mount as D: inside the OS.
+                var discs = Directory.EnumerateFiles(_instance.ContentPath)
+                    .Where(f => f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
+                             || f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)
+                             || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase))
+                    .Select(Path.GetFileName)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (discs.Count > 0)
                 {
                     var m3u = Path.Combine(_instance.ContentPath, "emudos.m3u8");
-                    File.WriteAllText(m3u, Path.GetFileName(disc) + "\n");
+                    File.WriteAllText(m3u, string.Join("\n", discs) + "\n");
                     loadTarget = m3u;
                 }
                 else

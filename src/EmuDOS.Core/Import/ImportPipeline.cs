@@ -159,7 +159,9 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
 
     // Copy a disc image into the content folder under a short, space-free 8.3-friendly name —
     // DOS/dosbox can't open an image with a long, spaced filename. Returns the name to IMGMOUNT.
-    private static string CopyDiscImage(string sourcePath, string contentDir)
+    // keepName: keep the source's (sanitized) filename instead of the short "disc.ext". Used for
+    // multi-disc sets so each disc stays distinguishable in dosbox_pure's disc-swap menu.
+    private static string CopyDiscImage(string sourcePath, string contentDir, bool keepName = false)
     {
         Directory.CreateDirectory(contentDir);
         var ext = Path.GetExtension(sourcePath).ToLowerInvariant();
@@ -179,9 +181,71 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             return name;
         }
 
-        var dest = "disc" + ext; // disc.iso / disc.chd / disc.bin
+        var dest = keepName ? SafeFileName(Path.GetFileName(sourcePath)) : "disc" + ext;
         File.Copy(sourcePath, Path.Combine(contentDir, dest), overwrite: true);
         return dest;
+    }
+
+    private static string SafeFileName(string name) =>
+        string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+
+    private static readonly System.Text.RegularExpressions.Regex DiscMarker = new(
+        @"[\s_\-]*[\(\[]?\s*(disc|disk|cd|dvd)\s*\d+\s*[\)\]]?\s*$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>Whether a path is a disc image we know how to mount.</summary>
+    public static bool IsDiscFile(string path) =>
+        DiscImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    /// <summary>A title with a trailing disc marker ("(Disc 2)", "CD1", "- Disk 3") removed.</summary>
+    public static string StripDiscMarker(string name) =>
+        string.IsNullOrEmpty(name) ? string.Empty : DiscMarker.Replace(name, string.Empty).Trim();
+
+    /// <summary>Group disc-image paths into per-game sets by their disc-marker-stripped name, so a
+    /// bundle like "Game (Disc 1).iso" + "Game (Disc 2).iso" lands as one multi-disc game.</summary>
+    public static IEnumerable<IReadOnlyList<string>> GroupDiscSets(IEnumerable<string> discPaths) =>
+        discPaths.GroupBy(p => StripDiscMarker(Path.GetFileNameWithoutExtension(p)), StringComparer.OrdinalIgnoreCase)
+                 .Select(g => (IReadOnlyList<string>)g.OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList());
+
+    /// <summary>Import several disc images of one game as a single multi-disc gamebox.</summary>
+    public async Task<ImportResult> ImportDiscSetAsync(
+        IReadOnlyList<string> discPaths,
+        IProgress<ImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(discPaths);
+        if (discPaths.Count == 0)
+            return new ImportResult { Success = false, Error = "No discs to import." };
+        try
+        {
+            var title = StripDiscMarker(Path.GetFileNameWithoutExtension(discPaths[0]));
+            if (string.IsNullOrWhiteSpace(title))
+                title = "Untitled";
+
+            var gameboxPath = AllocateGameboxPath(title);
+            var box = new Gamebox(gameboxPath);
+            Directory.CreateDirectory(box.ContentDir);
+
+            foreach (var disc in discPaths)
+            {
+                progress?.Report(new ImportProgress($"Copying {Path.GetFileName(disc)}", null));
+                await Task.Run(() => CopyDiscImage(disc, box.ContentDir, keepName: true), cancellationToken);
+            }
+
+            var profile = new GameProfile { Title = title, SourceMedia = SourceMediaType.Iso, Launch = new LaunchSpec() };
+            store.WriteProfile(gameboxPath, profile);
+
+            return new ImportResult
+            {
+                Success = true,
+                GameboxPath = gameboxPath,
+                Classification = ImportClassification.NeedsInstall,
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ImportResult { Success = false, Error = ex.Message };
+        }
     }
 
     private static IEnumerable<string> CueReferencedFiles(string cuePath)

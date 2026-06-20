@@ -129,13 +129,42 @@ public sealed partial class MainViewModel : ObservableObject
         return Find("*.rom").Concat(Find("*.sf2"));
     }
 
-    /// <summary>Import each dropped path (folder/archive) and refresh the shelf.</summary>
+    /// <summary>Import each dropped path and refresh the shelf. A bundle of disc images sharing a
+    /// base name (e.g. "Game (Disc 1/2/3)") becomes one multi-disc game; everything else imports
+    /// individually.</summary>
     public async Task ImportPathsAsync(IEnumerable<string> paths)
     {
+        var all = paths.ToList();
+        var discFiles = all.Where(p => File.Exists(p) && Core.Import.ImportPipeline.IsDiscFile(p)).ToHashSet();
+        var singles = all.Where(p => !discFiles.Contains(p)).ToList();
+        var discSets = new List<IReadOnlyList<string>>();
+        foreach (var set in Core.Import.ImportPipeline.GroupDiscSets(discFiles))
+        {
+            if (set.Count >= 2) discSets.Add(set);
+            else singles.Add(set[0]); // a lone disc imports the normal single-disc way
+        }
+
         bool hadError = false;
         string? installHint = null;
         string? warning = null;
-        foreach (var path in paths)
+
+        foreach (var set in discSets)
+        {
+            Report($"Importing {set.Count}-disc game…", busy: true);
+            var result = await _services.Import.ImportDiscSetAsync(set);
+            if (result.Success && result.GameboxPath is not null)
+            {
+                _services.Library.UpsertFromGamebox(result.GameboxPath);
+                installHint = $"Imported a {set.Count}-disc game — open it to install, swapping discs from the in-game menu.";
+            }
+            else
+            {
+                Report($"Couldn't import discs: {result.Error}", busy: false);
+                hadError = true;
+            }
+        }
+
+        foreach (var path in singles)
         {
             var name = Path.GetFileName(path.TrimEnd('\\', '/'));
             Report($"Importing {name}…", busy: true);
