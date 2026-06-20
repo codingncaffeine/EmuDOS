@@ -35,6 +35,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private BufferedWaveProvider? _audioBuffer;
     private byte[] _audioBytes = [];
     private int _audioBatches;
+    private int _sampleRate = 48000;
+
+    private Core.Media.RecordingService? _recorder;
+    private int _recWidth, _recHeight;
 
     private readonly byte[]? _lut; // brightness/gamma lookup; null = no adjustment (fast path)
 
@@ -217,6 +221,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     public void SetAudioSampleRate(int sampleRate)
     {
+        _sampleRate = sampleRate;
         Dispatcher.Invoke(() =>
         {
             try
@@ -249,6 +254,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             _audioBytes = new byte[source.Length];
         source.CopyTo(_audioBytes);
         buffer.AddSamples(_audioBytes, 0, source.Length);
+        _recorder?.WriteAudio(_audioBytes, source.Length);
 
         if (++_audioBatches % 300 == 1)
             _log.Info($"audio #{_audioBatches} buffered={buffer.BufferedBytes}B | input: {_session.InputDiagnostics}");
@@ -328,6 +334,11 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
             _bitmap.WritePixels(
                 new Int32Rect(0, 0, _frameWidth, _frameHeight), _frameBuffer, _frameWidth * 4, 0);
+
+            // Recording: feed the BGRX frame (only while the resolution matches what we started at).
+            var recorder = _recorder;
+            if (recorder?.IsRecording == true && _frameWidth == _recWidth && _frameHeight == _recHeight)
+                recorder.WriteVideoFrame(_frameBuffer, _frameWidth * _frameHeight * 4);
         }
     }
 
@@ -363,6 +374,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (e.Key == Key.F12)
         {
             CaptureScreenshot();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.F9)
+        {
+            ToggleRecording();
             e.Handled = true;
             return;
         }
@@ -583,6 +600,53 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         }
     }
 
+    // F9: start/stop video recording. Stop encodes on a background thread so the UI doesn't freeze.
+    private void ToggleRecording()
+    {
+        var services = ((App)Application.Current).Services;
+
+        if (_recorder?.IsRecording == true)
+        {
+            var recorder = _recorder;
+            _recorder = null;
+            RecIndicator.Visibility = Visibility.Collapsed;
+            ShowHint("Encoding video…", 2.0);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var path = recorder.Stop();
+                Dispatcher.Invoke(() => ShowHint(path is not null ? "Video saved" : "Recording failed"));
+            });
+            return;
+        }
+
+        if (_frameWidth <= 0)
+            return;
+
+        var ffmpeg = services.Downloads.InstalledPath(Core.Downloads.AssetManifest.Ffmpeg);
+        if (!System.IO.File.Exists(ffmpeg))
+        {
+            ShowHint("Install FFmpeg first (Downloads tab)", 2.5);
+            return;
+        }
+
+        var dir = string.IsNullOrWhiteSpace(services.Settings.VideoFolder)
+            ? services.Paths.VideosDir : services.Settings.VideoFolder;
+        var path2 = System.IO.Path.Combine(dir, $"{SafeName(_instance.Profile.Title)} {DateTime.Now:yyyy-MM-dd HH-mm-ss}.mp4");
+
+        _recorder = new Core.Media.RecordingService(ffmpeg);
+        _recWidth = _frameWidth;
+        _recHeight = _frameHeight;
+        var error = _recorder.Start(path2, _recWidth, _recHeight, _sampleRate, services.Settings.VideoQuality);
+        if (error is not null)
+        {
+            _recorder = null;
+            ShowHint($"Couldn't record: {error}", 2.5);
+            return;
+        }
+        RecIndicator.Visibility = Visibility.Visible;
+        ShowHint("Recording started — F9 to stop", 1.5);
+    }
+
     private static string SafeName(string title) =>
         string.Concat(title.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
 
@@ -673,6 +737,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        if (_recorder?.IsRecording == true)
+        {
+            ShowHint("Finishing video…");
+            _recorder.Stop(); // finalize the recording before we tear the session down
+            _recorder = null;
+        }
+
         SaveGameState();
         _lcdTimer?.Stop();
         _lcdWindow?.Close();

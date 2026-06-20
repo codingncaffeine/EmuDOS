@@ -16,5 +16,9 @@
                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0"
                    Foreground="#FFEBD43E" FontSize="14" FontWeight="SemiBold"
                    Background="#C0000000" Padding="14,6"/>
+        <TextBlock x:Name="RecIndicator" Visibility="Collapsed" IsHitTestVisible="False" Text="● REC"
+                   HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,16,0"
+                   Foreground="#FFE03535" FontSize="14" FontWeight="Bold"
+                   Background="#A0000000" Padding="8,3"/>
     </Grid>
 </Window>
