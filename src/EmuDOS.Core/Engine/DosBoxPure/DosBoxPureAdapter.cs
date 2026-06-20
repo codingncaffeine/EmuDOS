@@ -80,7 +80,13 @@ public static class DosBoxPureAdapter
         // (-1) — that's where "Boot and Install New Operating System" + the hard-disk size live.
         // Normal games auto-run via DOSBOX.BAT, so they keep the default (auto-start) behavior.
         if (profile.SourceMedia == SourceMediaType.Iso)
+        {
             o["dosbox_pure_menu_time"] = "-1";
+            // When booting an installed OS, don't create the empty writable D: scratch drive — it
+            // shows up confusingly labelled after our .m3u8. Use only the mounted CD-ROM(s) instead,
+            // so a game disc is the drive the OS sees. (No effect on plain DOS CD games.)
+            o["dosbox_pure_bootos_dfreespace"] = "hide";
+        }
 
         return o;
     }
