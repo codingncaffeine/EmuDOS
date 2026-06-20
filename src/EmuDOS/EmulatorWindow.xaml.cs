@@ -405,16 +405,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         // never hit the window edge — infinite turning, like a captured mouse.
         if (_mouseLocked)
         {
-            double dx = pos.X - ActualWidth / 2, dy = pos.Y - ActualHeight / 2;
-            if (dx != 0 || dy != 0)
-            {
-                lock (_inputLock)
-                {
-                    _mouseAccumX += dx * _mouseScale;
-                    _mouseAccumY += dy * _mouseScale;
-                }
-                WarpToCentre();
-            }
+            // Locked motion is fed by raw input (RawInputHook / WM_INPUT) — true physical deltas that
+            // never clip at a screen edge. Here we just keep the hidden cursor parked near centre so
+            // its clicks stay over the window.
+            WarpToCentre();
             return;
         }
 
@@ -483,8 +477,11 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void WarpToCentre()
     {
-        var screen = PointToScreen(new Point(ActualWidth / 2, ActualHeight / 2));
-        SetCursorPos((int)screen.X, (int)screen.Y);
+        // Warp to the centre of the CONTENT area (matches the locked-mouse delta measurement), and
+        // round rather than truncate so there's no sub-pixel directional bias each frame.
+        var root = (FrameworkElement)Content;
+        var screen = root.PointToScreen(new Point(root.ActualWidth / 2, root.ActualHeight / 2));
+        SetCursorPos((int)Math.Round(screen.X), (int)Math.Round(screen.Y));
     }
 
     private void ShowHint(string text, double seconds = 1.3)
@@ -504,6 +501,73 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     [System.Runtime.InteropServices.LibraryImport("user32.dll")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static partial bool SetCursorPos(int x, int y);
+
+    // Raw relative mouse input (WM_INPUT) for locked/FPS mode: reads the physical device delta, so
+    // it never loses motion when the OS clips the cursor at a screen edge (the old warp-to-centre
+    // delta did, biasing vertical motion). Unlocked mode keeps using absolute positions.
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RawInputDevice { public ushort UsagePage; public ushort Usage; public uint Flags; public nint Target; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RawInputHeader { public uint Type; public uint Size; public nint Device; public nint WParam; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RawMouse { public ushort Flags; public uint Buttons; public uint RawButtons; public int LastX; public int LastY; public uint Extra; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RawInput { public RawInputHeader Header; public RawMouse Mouse; }
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool RegisterRawInputDevices([System.Runtime.InteropServices.In] RawInputDevice[] devices, uint num, uint size);
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    private static partial uint GetRawInputData(nint rawInput, uint command, nint data, ref uint size, uint headerSize);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        var devices = new[] { new RawInputDevice { UsagePage = 0x01, Usage = 0x02, Flags = 0, Target = hwnd } };
+        RegisterRawInputDevices(devices, 1, (uint)System.Runtime.InteropServices.Marshal.SizeOf<RawInputDevice>());
+        System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(RawInputHook);
+    }
+
+    private nint RawInputHook(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+    {
+        const int WM_INPUT = 0x00FF;
+        const uint RID_INPUT = 0x10000003;
+        if (msg != WM_INPUT || !_mouseLocked)
+            return 0;
+
+        uint headerSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<RawInputHeader>();
+        uint size = 0;
+        GetRawInputData(lParam, RID_INPUT, 0, ref size, headerSize);
+        if (size == 0 || size > 1024)
+            return 0;
+
+        var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal((int)size);
+        try
+        {
+            if (GetRawInputData(lParam, RID_INPUT, buffer, ref size, headerSize) == size)
+            {
+                var raw = System.Runtime.InteropServices.Marshal.PtrToStructure<RawInput>(buffer);
+                if (raw.Header.Type == 0 && (raw.Mouse.Flags & 1) == 0) // type 0 = mouse, bit0 clear = relative
+                {
+                    lock (_inputLock)
+                    {
+                        _mouseAccumX += raw.Mouse.LastX * _sensitivity;
+                        _mouseAccumY += raw.Mouse.LastY * _sensitivity;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer);
+        }
+        return 0;
+    }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
