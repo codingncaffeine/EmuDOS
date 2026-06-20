@@ -1,4 +1,6 @@
-# EmuDOS
+<p align="center">
+  <img src="src/EmuDOS/Assets/EmuDOS-Logo.png" alt="EmuDOS" width="420">
+</p>
 
 A good-looking, Boxer-style DOS gaming frontend for Windows. Drop your games in and they appear as boxes on a shelf — art downloaded automatically, sensible settings applied for you, and Roland MT-32 music (with a working LCD) when you supply the ROMs.
 
@@ -14,8 +16,9 @@ Inspired by [Boxer](http://boxerapp.com/) for the Mac, built Windows-first.
 - **Manuals** — right-click → *Download manual* (ScreenScraper, with an Internet Archive fallback), saved per game.
 - **Per-game settings** — CPU cycles, machine type, memory, Sound Blaster/MIDI device, aspect correction, and brightness/gamma, saved as an override that survives catalog updates.
 - **Roland MT-32** — drop the ROMs in and MT-32 games just use them, with an on-screen dot-matrix LCD on a picture of the unit. (ROMs are user-supplied — see below.)
-- **Save states**, **per-game window size memory**, and **remembered launcher** (the program you pick in the *Run* menu becomes the default).
-- **FPS mouse lock** — middle-click to lock/unlock the mouse in-game; scroll wheel adjusts sensitivity live.
+- **Save states**, **per-game window size memory**, and a **smart launcher** that auto-detects the game program (with *Choose program…* to override and remember a different one).
+- **FPS mouse lock** — middle-click (or a remappable key) to lock/unlock the mouse in-game; scroll wheel adjusts sensitivity live.
+- **Screenshots & recording** — `F12` captures a screenshot, `F9` records gameplay video (via FFmpeg); folders, quality, and the keys are configurable under Preferences → *Media* and *Hotkeys*.
 - **Open in DOS** — boot a game straight to the `C:\` prompt to run its `SETUP`, poke around, or pick a different executable.
 - **Downloads tab** — fetches the emulator core and game catalog on demand, and tells you whether your MT-32 ROMs are in place.
 
@@ -58,11 +61,13 @@ EmuDOS stands on the work of others, with thanks:
 - **[munt / mt32emu](https://github.com/munt/munt)** — the Roland MT-32 emulation behind our synth.
 - **[eXoDOS](https://www.retro-exo.com/exodos.html)** — the DOS configuration set our catalog is seeded from.
 - **[libretro](https://www.libretro.com/)** — the core API EmuDOS hosts.
+- **[FFmpeg](https://ffmpeg.org/)** — optional gameplay video recording.
 - **[ScreenScraper](https://www.screenscraper.fr/)**, **[SteamGridDB](https://www.steamgriddb.com/)**, and the **[Internet Archive](https://archive.org/)** — box art and manuals.
 
 ## Third-party components
 
 - **DOSBox Pure** (libretro core) — GPLv2; downloaded at runtime, never bundled.
+- **FFmpeg** — GPL; downloaded on demand for the optional video-recording feature, never bundled.
 - **munt / mt32emu** — LGPL 2.1; compiled into our `emudos_mt32.dll` (source under `src/native/mt32`, rebuildable via `build.cmd`).
 - Box art / manuals come from **ScreenScraper**, **SteamGridDB**, and the **Internet Archive** via their APIs.
 
