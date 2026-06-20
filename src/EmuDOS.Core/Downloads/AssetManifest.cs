@@ -40,6 +40,21 @@ public static class AssetManifest
     // LGPL-based DLL, so unlike the GPL core there's no reason to download it. The only
     // user-supplied MT-32 piece is the Roland ROMs (copyrighted; detected, never distributed).
 
+    public const string FfmpegFileName = "ffmpeg.exe";
+
+    /// <summary>FFmpeg (GPL) for video recording — optional. Downloaded, not bundled, like the core.
+    /// BtbN's win64 GPL zip carries ffmpeg.exe under bin/; ZippedCore extracts it by name.</summary>
+    public static DownloadAsset Ffmpeg { get; } = new()
+    {
+        Id = "ffmpeg",
+        DisplayName = "FFmpeg (video recording)",
+        Description = "Enables recording gameplay video. Optional — only needed for the record feature.",
+        Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+        Kind = DownloadKind.ZippedCore,
+        FileName = FfmpegFileName,
+        Category = AssetCategory.Native,
+    };
+
     /// <summary>All assets the Downloads tab can offer.</summary>
-    public static IReadOnlyList<DownloadAsset> All { get; } = [DosBoxPure, Catalog];
+    public static IReadOnlyList<DownloadAsset> All { get; } = [DosBoxPure, Catalog, Ffmpeg];
 }

@@ -166,6 +166,53 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         var tag = level switch { 0 => "DBG", 1 => "INFO", 2 => "WARN", 3 => "ERR", _ => "LOG" };
         _log.Info($"[core:{tag}] {message}");
+
+        // dosbox reports the running program ("[DOSBOX STATUS] Program: NAME - …"). A program that
+        // starts right after the shell (COMMAND/DOSBOX) is one the *user* launched from the prompt —
+        // i.e. what they ran to play. Programs it then chains to aren't (prev isn't the shell). We
+        // remember the last such launch so "ran it once from DOS" sticks.
+        const string marker = "Program: ";
+        int i = message.IndexOf(marker, StringComparison.Ordinal);
+        if (i < 0)
+            return;
+        int start = i + marker.Length;
+        int dash = message.IndexOf(" -", start, StringComparison.Ordinal);
+        var name = (dash > start ? message[start..dash] : message[start..]).Trim();
+        if (name.Length == 0)
+            return;
+
+        bool isShell = name.Equals("COMMAND", StringComparison.OrdinalIgnoreCase) || name.Equals("DOSBOX", StringComparison.OrdinalIgnoreCase);
+        bool prevWasShell = _prevProgram is null
+            || _prevProgram.Equals("COMMAND", StringComparison.OrdinalIgnoreCase)
+            || _prevProgram.Equals("DOSBOX", StringComparison.OrdinalIgnoreCase);
+        if (prevWasShell && !isShell)
+            _lastLaunch = name;
+        _prevProgram = name;
+    }
+
+    private string? _prevProgram;
+    private string? _lastLaunch;
+
+    // Map the program the user launched to a content executable (relative, DOS-style), skipping
+    // setup tools and DOS extenders (those are never what "play the game" means).
+    private string? CapturedLaunch()
+    {
+        if (_lastLaunch is null)
+            return null;
+        try
+        {
+            string[] exts = [".exe", ".com", ".bat"];
+            var match = System.IO.Directory.EnumerateFiles(_instance.ContentPath, "*.*", System.IO.SearchOption.AllDirectories)
+                .FirstOrDefault(f => exts.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant())
+                                  && System.IO.Path.GetFileNameWithoutExtension(f).Equals(_lastLaunch, StringComparison.OrdinalIgnoreCase));
+            if (match is null || Core.Import.DosExecutables.IsRuntimeHelper(match))
+                return null;
+            var name = System.IO.Path.GetFileNameWithoutExtension(match).ToLowerInvariant();
+            if (name.Contains("setup") || name.Contains("install") || name.Contains("config"))
+                return null;
+            return System.IO.Path.GetRelativePath(_instance.ContentPath, match).Replace('/', '\\');
+        }
+        catch { return null; }
     }
 
     public void SetAudioSampleRate(int sampleRate)
@@ -582,8 +629,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _audioBuffer = null;
     }
 
-    // Persist the window size so next launch restores it. (The remembered executable is set only
-    // by an explicit Run-menu choice, so a plain launch never overwrites it here.)
+    // Persist the window size so next launch restores it. (The launch program is chosen by auto-
+    // detection or the program picker, not from whatever happened to run, so we don't touch it here.)
     private void SaveGameState()
     {
         try
@@ -598,6 +645,11 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
                 WindowWidth = (int)size.Width,
                 WindowHeight = (int)size.Height,
             };
+
+            var launched = CapturedLaunch();
+            if (launched is not null)
+                state = state with { LastRunProgram = launched };
+
             store.WriteState(_instance.GameboxPath, state);
         }
         catch

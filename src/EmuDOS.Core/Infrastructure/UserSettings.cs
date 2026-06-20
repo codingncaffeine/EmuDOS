@@ -10,4 +10,19 @@ public sealed class UserSettings
 
     /// <summary>SteamGridDB API key (used as an art fallback source).</summary>
     public string SteamGridDbKey { get; set; } = string.Empty;
+
+    // --- Media (screenshots + recording). Empty folder = use the AppPaths default. ---
+
+    /// <summary>Where screenshots are saved (empty = the default Screenshots folder).</summary>
+    public string ScreenshotFolder { get; set; } = string.Empty;
+
+    /// <summary>Where recorded videos are saved (empty = the default Videos folder).</summary>
+    public string VideoFolder { get; set; } = string.Empty;
+
+    /// <summary>True = save screenshots at the game's native resolution (pixel-perfect);
+    /// false = at the window/displayed size.</summary>
+    public bool ScreenshotOriginalSize { get; set; } = true;
+
+    /// <summary>Video recording quality: "Low", "Medium", or "High".</summary>
+    public string VideoQuality { get; set; } = "Medium";
 }

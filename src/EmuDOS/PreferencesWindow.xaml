@@ -117,6 +117,52 @@
             </ScrollViewer>
         </TabItem>
 
+        <TabItem Header="Media">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="22,18">
+                    <TextBlock Text="Screenshots" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Press F12 in-game to capture a screenshot."/>
+
+                    <TextBlock Text="Save folder" Style="{StaticResource FieldLabel}"/>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Browse…" Margin="8,0,0,0" Padding="14,5" Click="OnBrowseScreenshotFolder"/>
+                        <TextBox x:Name="ScreenshotFolderBox"/>
+                    </DockPanel>
+
+                    <TextBlock Text="Capture size" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <ComboBox x:Name="ScreenshotSizeBox" Width="240" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}">
+                        <ComboBoxItem Content="Original (game's native pixels)"/>
+                        <ComboBoxItem Content="Window size (as displayed)"/>
+                    </ComboBox>
+
+                    <Separator Margin="0,22" Background="{StaticResource BorderNormal}"/>
+
+                    <TextBlock Text="Video recording" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="Press F9 in-game to start/stop recording. Needs FFmpeg (install it from the Downloads tab)."/>
+
+                    <TextBlock Text="Save folder" Style="{StaticResource FieldLabel}"/>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Browse…" Margin="8,0,0,0" Padding="14,5" Click="OnBrowseVideoFolder"/>
+                        <TextBox x:Name="VideoFolderBox"/>
+                    </DockPanel>
+
+                    <TextBlock Text="Quality" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <ComboBox x:Name="VideoQualityBox" Width="240" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}">
+                        <ComboBoxItem Content="Low"/>
+                        <ComboBoxItem Content="Medium"/>
+                        <ComboBoxItem Content="High"/>
+                    </ComboBox>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                        <Button Content="Save" Click="OnSaveMedia" Padding="18,6"/>
+                        <TextBlock x:Name="MediaStatus" Foreground="#9FE0A0" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
         <TabItem Header="Downloads">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="22,18">

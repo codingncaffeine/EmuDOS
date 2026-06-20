@@ -82,26 +82,35 @@ public partial class MainWindow : Window
             menu.Items.Add(addDisc);
         }
 
-        // A "Run" submenu of executables we've used before plus any found in the content, so the
-        // user can pick the right one when the default launch doesn't land on a runnable program.
+        // A clickable picker of executables we've used before plus any found in the content, so the
+        // user can choose the game program (or a setup tool) instead of hunting through DOS.
         var services = ((App)Application.Current).Services;
         var executables = OrderedExecutables(
             services.Store.ReadState(tile.Game.GameboxPath),
             ScanExecutables(Path.Combine(tile.Game.GameboxPath, "content")));
         if (executables.Count > 0)
         {
-            var run = new MenuItem { Header = "Run" };
-            foreach (var exe in executables.Take(25))
-            {
-                var item = new MenuItem { Header = exe };
-                item.Click += async (_, _) => await LaunchGameAsync(tile, executableOverride: exe);
-                run.Items.Add(item);
-            }
-            menu.Items.Add(run);
+            var choose = new MenuItem { Header = "Choose program…" };
+            choose.Click += (_, _) => ChooseProgram(tile, executables);
+            menu.Items.Add(choose);
         }
 
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    private async void ChooseProgram(GameTile tile, List<string> executables)
+    {
+        var services = ((App)Application.Current).Services;
+        var state = services.Store.ReadState(tile.Game.GameboxPath);
+        // Pre-select what we'd launch by default: the remembered exe, else the smart-detected game.
+        var current = string.IsNullOrWhiteSpace(state.LastExecutable)
+            ? BestGameExecutable(Path.Combine(tile.Game.GameboxPath, "content"), tile.Title)
+            : state.LastExecutable;
+
+        var dialog = new ChooseProgramDialog(tile.Title, executables, current) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.SelectedExecutable is { } exe)
+            await LaunchGameAsync(tile, executableOverride: exe); // remembers it (unless it's a setup tool)
     }
 
     private static readonly string[] ExecutableExtensions = [".exe", ".com", ".bat"];
@@ -137,14 +146,16 @@ public partial class MainWindow : Window
         return found;
     }
 
-    /// <summary>The most likely game program among the content's executables — preferring a name that
-    /// matches the game's title, then one installed into a subfolder — skipping installers/setup tools.</summary>
+    /// <summary>The most likely game program among the content's executables — a name matching the
+    /// title, then a .bat launcher when a separate DOS extender is present, then the largest exe (the
+    /// game engine dwarfs config/registration helpers) — skipping installers and setup tools.</summary>
     private static string? BestGameExecutable(string contentDir, string title)
     {
         var candidates = ScanExecutables(contentDir).Where(e => !IsSetupLike(e)).ToList();
         if (candidates.Count == 0)
             return null;
 
+        // 1. Name matches the title (e.g. ABUSE.EXE for "Abuse", SKY.EXE for "Beneath a Steel Sky").
         static string Key(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
         var titleKey = Key(title);
         if (titleKey.Length > 0)
@@ -158,8 +169,17 @@ public partial class MainWindow : Window
                 return match;
         }
 
-        // An exe inside a subfolder is usually the installed game, vs a loose installer at the root.
-        return candidates.FirstOrDefault(e => e.Contains('\\')) ?? candidates[0];
+        // 2. The largest executable — the game engine dwarfs config/registration/splash helpers
+        //    (DUKE3D.EXE at 1.2 MB vs SETMAIN/COMMIT in the tens of KB). This is the first-launch
+        //    guess; once the user runs the real program from DOS, that capture takes over.
+        static long Size(string p) { try { return new FileInfo(p).Length; } catch { return 0; } }
+        var largest = candidates
+            .Select(e => (exe: e, size: Size(Path.Combine(contentDir, e))))
+            .OrderByDescending(x => x.size)
+            .FirstOrDefault();
+        return largest.size > 0
+            ? largest.exe
+            : (candidates.FirstOrDefault(e => e.Contains('\\')) ?? candidates[0]);
     }
 
     private static List<string> OrderedExecutables(GameUserState state, List<string> scanned)
@@ -615,25 +635,18 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Pick the executable: an explicit Run-menu choice wins; otherwise the one the user
-            // last chose for this game (the running tally), falling back to the configured default.
-            // The remembered choice beats the configured exe so a bad guess (e.g. a DOS extender)
-            // doesn't keep stranding the user once they've found the real launcher.
+            // Pick the executable. Order: an explicit Run/picker choice this launch, then a program
+            // the user *deliberately* picked before, then auto-detect the game (title / extender-
+            // launcher .bat / largest exe), then the configured guess. The import/curated guess is
+            // often a config tool (COMMIT/SETMAIN) or extender (DOS4GW), so it ranks last — and a
+            // stale auto-value never wins because only the picker sets ExecutableIsUserChoice.
             var state = services.Store.ReadState(tile.Game.GameboxPath);
             var configured = instance.Profile.Launch.Executable;
             var chosen = executableOverride
-                ?? (string.IsNullOrWhiteSpace(state.LastExecutable) ? configured : state.LastExecutable);
-
-            // Smart default: if we'd otherwise launch an installer (or have nothing configured) but the
-            // game is already installed, prefer the real program — the user shouldn't have to keep
-            // running the installer or hunt through the Run menu after a one-time install.
-            if (executableOverride is null && string.IsNullOrWhiteSpace(state.LastExecutable)
-                && (string.IsNullOrWhiteSpace(chosen) || IsSetupLike(chosen)))
-            {
-                var game = BestGameExecutable(Path.Combine(tile.Game.GameboxPath, "content"), tile.Title);
-                if (game is not null)
-                    chosen = game;
-            }
+                ?? (state.ExecutableIsUserChoice ? state.LastExecutable : null)
+                ?? state.LastRunProgram
+                ?? BestGameExecutable(Path.Combine(tile.Game.GameboxPath, "content"), tile.Title)
+                ?? configured;
 
             if (!string.Equals(chosen, configured, StringComparison.OrdinalIgnoreCase))
                 instance = instance with

@@ -37,6 +37,13 @@ public partial class PreferencesWindow : Window
         SsPass.Password = services.Settings.ScreenScraperPassword;
         SgdbKey.Text = services.Settings.SteamGridDbKey;
 
+        ScreenshotFolderBox.Text = string.IsNullOrWhiteSpace(services.Settings.ScreenshotFolder)
+            ? services.Paths.ScreenshotsDir : services.Settings.ScreenshotFolder;
+        VideoFolderBox.Text = string.IsNullOrWhiteSpace(services.Settings.VideoFolder)
+            ? services.Paths.VideosDir : services.Settings.VideoFolder;
+        ScreenshotSizeBox.SelectedIndex = services.Settings.ScreenshotOriginalSize ? 0 : 1;
+        VideoQualityBox.SelectedIndex = services.Settings.VideoQuality switch { "Low" => 0, "High" => 2, _ => 1 };
+
         DownloadList.ItemsSource = AssetManifest.All
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
             .ToList();
@@ -175,6 +182,28 @@ public partial class PreferencesWindow : Window
     }
 
     // ── Snaps (art accounts) ──────────────────────────────────────────────────────
+
+    private void OnBrowseScreenshotFolder(object sender, RoutedEventArgs e) => BrowseInto(ScreenshotFolderBox);
+    private void OnBrowseVideoFolder(object sender, RoutedEventArgs e) => BrowseInto(VideoFolderBox);
+
+    private static void BrowseInto(TextBox target)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Choose a folder" };
+        if (!string.IsNullOrWhiteSpace(target.Text) && Directory.Exists(target.Text))
+            dialog.InitialDirectory = target.Text;
+        if (dialog.ShowDialog() == true)
+            target.Text = dialog.FolderName;
+    }
+
+    private void OnSaveMedia(object sender, RoutedEventArgs e)
+    {
+        _services.Settings.ScreenshotFolder = ScreenshotFolderBox.Text.Trim();
+        _services.Settings.VideoFolder = VideoFolderBox.Text.Trim();
+        _services.Settings.ScreenshotOriginalSize = ScreenshotSizeBox.SelectedIndex == 0;
+        _services.Settings.VideoQuality = VideoQualityBox.SelectedIndex switch { 0 => "Low", 2 => "High", _ => "Medium" };
+        _services.SettingsStore.Save(_services.Settings);
+        Set(MediaStatus, "Saved.", Success);
+    }
 
     private async void OnLoginScreenScraper(object sender, RoutedEventArgs e)
     {

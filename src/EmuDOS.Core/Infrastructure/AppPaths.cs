@@ -34,6 +34,12 @@ public sealed class AppPaths
     /// <summary>Downloaded curated config database updates (override the embedded baseline).</summary>
     public string CatalogDir => Path.Combine(DataRoot, "Catalog");
 
+    /// <summary>Default location for screenshots (overridable in Preferences → Media).</summary>
+    public string ScreenshotsDir => Path.Combine(DataRoot, "Screenshots");
+
+    /// <summary>Default location for recorded videos (overridable in Preferences → Media).</summary>
+    public string VideosDir => Path.Combine(DataRoot, "Videos");
+
     private static string DefaultDataRoot() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EmuDOS");
 
