@@ -4,3 +4,8 @@
 *.md text
 *.csproj text
 *.slnx text
+
+# The munt MT-32 API header is vendored third-party code (LGPL); exclude it from
+# GitHub's language statistics so they reflect EmuDOS as the C# app it is. Our own
+# shim (emudos_mt32.cpp) stays counted.
+src/native/mt32/mt32emu.h linguist-vendored
