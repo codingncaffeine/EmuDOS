@@ -248,8 +248,9 @@ public partial class MainWindow : Window
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = $"Add a disc to {tile.Title}",
+            Title = $"Add disc(s) to {tile.Title}",
             Filter = "Disc images|*.iso;*.cue;*.bin;*.chd|All files|*.*",
+            Multiselect = true,
         };
         if (dialog.ShowDialog(this) != true)
             return;
@@ -258,21 +259,49 @@ public partial class MainWindow : Window
         {
             var content = Path.Combine(tile.Game.GameboxPath, "content");
             Directory.CreateDirectory(content);
-            File.Copy(dialog.FileName, Path.Combine(content, Path.GetFileName(dialog.FileName)), overwrite: true);
 
-            // A .cue references .bin track files alongside it — bring them along too.
-            if (Path.GetExtension(dialog.FileName).Equals(".cue", StringComparison.OrdinalIgnoreCase))
+            // A .bin is mounted via its .cue, so don't double-copy a .bin that a selected .cue brings.
+            var cueBins = dialog.FileNames
+                .Where(f => f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(cue => Core.Import.ImportPipeline.CueReferencedFiles(cue).Select(Path.GetFileName))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            int added = 0;
+            var udf = new List<string>();
+            foreach (var path in dialog.FileNames)
             {
-                var sourceDir = Path.GetDirectoryName(dialog.FileName)!;
-                foreach (var bin in Directory.EnumerateFiles(sourceDir, "*.bin"))
-                    File.Copy(bin, Path.Combine(content, Path.GetFileName(bin)), overwrite: true);
+                if (path.EndsWith(".bin", StringComparison.OrdinalIgnoreCase) && cueBins.Contains(Path.GetFileName(path)))
+                    continue; // its .cue will copy it
+
+                CopyDiscWithSidecars(path, content);
+                added++;
+                if (path.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) && !Core.Import.ImportPipeline.IsIso9660(path))
+                    udf.Add(Path.GetFileNameWithoutExtension(path));
             }
 
-            Vm?.Report($"Added {Path.GetFileName(dialog.FileName)} to {tile.Title} — launch it, then pick the disc in the start menu to mount it as D:.", busy: false);
+            var msg = $"Added {added} disc{(added == 1 ? "" : "s")} to {tile.Title} — launch it and swap discs from the start menu.";
+            if (udf.Count > 0)
+                msg += $"  ⚠ {string.Join(", ", udf)} isn't a standard ISO9660 CD (e.g. UDF) and likely won't mount.";
+            Vm?.Report(msg, busy: false);
         }
         catch (Exception ex)
         {
             Vm?.Report($"Couldn't add disc: {ex.Message}", busy: false);
+        }
+    }
+
+    // Copy a disc image into the box; for a .cue, bring the track files it references along.
+    private static void CopyDiscWithSidecars(string source, string content)
+    {
+        File.Copy(source, Path.Combine(content, Path.GetFileName(source)), overwrite: true);
+        if (!source.EndsWith(".cue", StringComparison.OrdinalIgnoreCase))
+            return;
+        var sourceDir = Path.GetDirectoryName(source) ?? string.Empty;
+        foreach (var track in Core.Import.ImportPipeline.CueReferencedFiles(source))
+        {
+            var trackPath = Path.Combine(sourceDir, track);
+            if (File.Exists(trackPath))
+                File.Copy(trackPath, Path.Combine(content, Path.GetFileName(track)), overwrite: true);
         }
     }
 

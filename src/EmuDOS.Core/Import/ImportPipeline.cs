@@ -135,7 +135,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
 
     // A raw ISO has its volume descriptors at sector 16+ (2048 bytes each), each tagged "CD001".
     // No CD001 means a non-ISO9660 image (e.g. UDF) that dosbox can't read. Unknown -> assume OK.
-    private static bool IsIso9660(string isoPath)
+    public static bool IsIso9660(string isoPath)
     {
         try
         {
@@ -248,7 +248,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
         }
     }
 
-    private static IEnumerable<string> CueReferencedFiles(string cuePath)
+    public static IEnumerable<string> CueReferencedFiles(string cuePath)
     {
         foreach (var line in File.ReadLines(cuePath))
         {
