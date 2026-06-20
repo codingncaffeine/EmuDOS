@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Model;
@@ -43,6 +44,10 @@ public partial class PreferencesWindow : Window
             ? services.Paths.VideosDir : services.Settings.VideoFolder;
         ScreenshotSizeBox.SelectedIndex = services.Settings.ScreenshotOriginalSize ? 0 : 1;
         VideoQualityBox.SelectedIndex = services.Settings.VideoQuality switch { "Low" => 0, "High" => 2, _ => 1 };
+
+        HotkeyScreenshot.Text = Display(services.Settings.ScreenshotKey, "F12");
+        HotkeyRecord.Text = Display(services.Settings.RecordKey, "F9");
+        HotkeyMouseLock.Text = Display(services.Settings.MouseLockKey, "Middle Mouse");
 
         DownloadList.ItemsSource = AssetManifest.All
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
@@ -182,6 +187,31 @@ public partial class PreferencesWindow : Window
     }
 
     // ── Snaps (art accounts) ──────────────────────────────────────────────────────
+
+    private static string Display(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;
+
+    private void OnHotkeyCapture(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox box)
+            return;
+        e.Handled = true;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.Escape)
+        {
+            box.Text = box == HotkeyMouseLock ? "Middle Mouse" : box == HotkeyRecord ? "F9" : "F12";
+            return;
+        }
+        box.Text = key.ToString();
+    }
+
+    private void OnSaveHotkeys(object sender, RoutedEventArgs e)
+    {
+        _services.Settings.ScreenshotKey = HotkeyScreenshot.Text.Trim();
+        _services.Settings.RecordKey = HotkeyRecord.Text.Trim();
+        _services.Settings.MouseLockKey = HotkeyMouseLock.Text == "Middle Mouse" ? string.Empty : HotkeyMouseLock.Text.Trim();
+        _services.SettingsStore.Save(_services.Settings);
+        Set(HotkeysStatus, "Saved — applies next launch.", Success);
+    }
 
     private void OnBrowseScreenshotFolder(object sender, RoutedEventArgs e) => BrowseInto(ScreenshotFolderBox);
     private void OnBrowseVideoFolder(object sender, RoutedEventArgs e) => BrowseInto(VideoFolderBox);

@@ -25,4 +25,16 @@ public sealed class UserSettings
 
     /// <summary>Video recording quality: "Low", "Medium", or "High".</summary>
     public string VideoQuality { get; set; } = "Medium";
+
+    // --- Hotkeys (WPF Key names; remappable in Preferences → Hotkeys). ---
+
+    /// <summary>Key that captures a screenshot.</summary>
+    public string ScreenshotKey { get; set; } = "F12";
+
+    /// <summary>Key that starts/stops video recording.</summary>
+    public string RecordKey { get; set; } = "F9";
+
+    /// <summary>Optional key that toggles the mouse lock (middle-click always toggles it too).
+    /// Empty means middle-click only.</summary>
+    public string MouseLockKey { get; set; } = string.Empty;
 }

@@ -40,6 +40,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private Core.Media.RecordingService? _recorder;
     private int _recWidth, _recHeight;
 
+    private readonly Key _screenshotKey;
+    private readonly Key _recordKey;
+    private readonly Key? _mouseLockKey;
+
+    private static Key ParseKey(string name, Key fallback) => Enum.TryParse<Key>(name, out var k) ? k : fallback;
+
     private readonly byte[]? _lut; // brightness/gamma lookup; null = no adjustment (fast path)
 
     private Mt32LcdWindow? _lcdWindow;
@@ -73,6 +79,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         DarkChrome.Apply(this);
         _instance = instance;
         Title = $"EmuDOS — {instance.Profile.Title}";
+
+        var settings = ((App)Application.Current).Services.Settings;
+        _screenshotKey = ParseKey(settings.ScreenshotKey, Key.F12);
+        _recordKey = ParseKey(settings.RecordKey, Key.F9);
+        _mouseLockKey = Enum.TryParse<Key>(settings.MouseLockKey, out var mk) ? mk : null;
+
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
         _lut = BuildLut(instance.Profile.Display);
@@ -370,16 +382,22 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        // Media hotkeys are handled here and not forwarded to the game.
-        if (e.Key == Key.F12)
+        // Bound hotkeys are handled here and not forwarded to the game.
+        if (e.Key == _screenshotKey)
         {
             CaptureScreenshot();
             e.Handled = true;
             return;
         }
-        if (e.Key == Key.F9)
+        if (e.Key == _recordKey)
         {
             ToggleRecording();
+            e.Handled = true;
+            return;
+        }
+        if (_mouseLockKey is { } mouseLockKey && e.Key == mouseLockKey)
+        {
+            ToggleMouseLock();
             e.Handled = true;
             return;
         }

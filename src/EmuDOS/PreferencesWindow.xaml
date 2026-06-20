@@ -163,6 +163,35 @@
             </ScrollViewer>
         </TabItem>
 
+        <TabItem Header="Hotkeys">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="22,18">
+                    <TextBlock Text="Hotkeys" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,14"
+                               Text="Click a box and press the key you want it bound to. Press Esc to reset it to the default."/>
+
+                    <TextBlock Text="Screenshot" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="HotkeyScreenshot" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+
+                    <TextBlock Text="Record video" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeyRecord" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+
+                    <TextBlock Text="Mouse lock" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeyMouseLock" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0"
+                               Text="Middle-click always toggles mouse lock too."/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                        <Button Content="Save" Click="OnSaveHotkeys" Padding="18,6"/>
+                        <TextBlock x:Name="HotkeysStatus" Foreground="#9FE0A0" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
         <TabItem Header="Downloads">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="22,18">
