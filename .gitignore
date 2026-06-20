@@ -4,6 +4,7 @@
 [Dd]ebug/
 [Rr]elease/
 artifacts/
+build-stage/
 
 # Visual Studio / Rider
 .vs/
