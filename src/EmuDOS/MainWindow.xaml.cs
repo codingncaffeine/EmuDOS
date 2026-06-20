@@ -80,6 +80,10 @@ public partial class MainWindow : Window
             var addDisc = new MenuItem { Header = "Add disc…" };
             addDisc.Click += (_, _) => AddDisc(tile);
             menu.Items.Add(addDisc);
+
+            var addFromFolder = new MenuItem { Header = "Add disc from folder…" };
+            addFromFolder.Click += (_, _) => AddDiscFromFolder(tile);
+            menu.Items.Add(addFromFolder);
         }
 
         // A clickable picker of executables we've used before plus any found in the content, so the
@@ -303,6 +307,66 @@ public partial class MainWindow : Window
             if (File.Exists(trackPath))
                 File.Copy(trackPath, Path.Combine(content, Path.GetFileName(track)), overwrite: true);
         }
+    }
+
+    // Build an ISO9660 image from a folder (e.g. files extracted from a rip the emulator can't read)
+    // and attach it as a disc. Useful for getting loose game files onto a disc a guest OS can mount.
+    private async void AddDiscFromFolder(GameTile tile)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = $"Pick a folder to turn into a disc for {tile.Title}",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        var folder = dialog.FolderName;
+        var name = SafeDiscName(Path.GetFileName(folder.TrimEnd('\\', '/')));
+        var content = Path.Combine(tile.Game.GameboxPath, "content");
+        Directory.CreateDirectory(content);
+        var isoPath = Path.Combine(content, name + ".iso");
+
+        Vm?.Report($"Building a disc image from {Path.GetFileName(folder)}… this can take a minute.", busy: true);
+        try
+        {
+            await BuildIsoOnStaThread(folder, isoPath, name);
+            Vm?.Report($"Added {name}.iso to {tile.Title} — launch it and INSERT the disc from the menu (F10).", busy: false);
+        }
+        catch (Exception ex)
+        {
+            try { if (File.Exists(isoPath)) File.Delete(isoPath); } catch { /* leave a locked partial */ }
+            Vm?.Report($"Couldn't build the disc image: {ex.Message}", busy: false);
+        }
+    }
+
+    private static string SafeDiscName(string raw)
+    {
+        var cleaned = new string(raw.Where(c => !Path.GetInvalidFileNameChars().Contains(c)).ToArray()).Trim();
+        return cleaned.Length == 0 ? "disc" : cleaned;
+    }
+
+    // IMAPI2 is COM and wants an STA thread; this also keeps the slow build off the UI thread.
+    private static Task BuildIsoOnStaThread(string folder, string isoPath, string label)
+    {
+        var tcs = new TaskCompletionSource();
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                Core.Import.IsoBuilder.BuildFromFolder(folder, isoPath, label);
+                tcs.SetResult();
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        })
+        {
+            IsBackground = true,
+        };
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        return tcs.Task;
     }
 
     private void SetCustomArt(GameTile tile)
