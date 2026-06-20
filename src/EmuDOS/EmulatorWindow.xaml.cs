@@ -359,6 +359,14 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
+        // Media hotkeys are handled here and not forwarded to the game.
+        if (e.Key == Key.F12)
+        {
+            CaptureScreenshot();
+            e.Handled = true;
+            return;
+        }
+
         var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
         if (key == DosKey.None)
             return;
@@ -530,6 +538,53 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         var screen = root.PointToScreen(new Point(root.ActualWidth / 2, root.ActualHeight / 2));
         SetCursorPos((int)Math.Round(screen.X), (int)Math.Round(screen.Y));
     }
+
+    // Capture the current frame to a PNG — at the game's native resolution, or the displayed window
+    // size, per Preferences → Media.
+    private void CaptureScreenshot()
+    {
+        if (_bitmap is null)
+            return;
+        try
+        {
+            var services = ((App)Application.Current).Services;
+            BitmapSource source;
+            if (services.Settings.ScreenshotOriginalSize)
+            {
+                var snap = _bitmap.Clone();
+                snap.Freeze();
+                source = snap;
+            }
+            else
+            {
+                int w = Math.Max(1, (int)Screen.ActualWidth), h = Math.Max(1, (int)Screen.ActualHeight);
+                var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+                rtb.Render(Screen);
+                rtb.Freeze();
+                source = rtb;
+            }
+
+            var dir = string.IsNullOrWhiteSpace(services.Settings.ScreenshotFolder)
+                ? services.Paths.ScreenshotsDir : services.Settings.ScreenshotFolder;
+            System.IO.Directory.CreateDirectory(dir);
+            var path = System.IO.Path.Combine(dir, $"{SafeName(_instance.Profile.Title)} {DateTime.Now:yyyy-MM-dd HH-mm-ss}.png");
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(source));
+            using (var fs = System.IO.File.Create(path))
+                encoder.Save(fs);
+
+            ShowHint("Screenshot saved", 1.0);
+        }
+        catch (Exception ex)
+        {
+            _log.Info($"Screenshot failed: {ex.Message}");
+            ShowHint("Screenshot failed");
+        }
+    }
+
+    private static string SafeName(string title) =>
+        string.Concat(title.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
 
     private void ShowHint(string text, double seconds = 1.3)
     {
