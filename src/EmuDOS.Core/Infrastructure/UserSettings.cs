@@ -37,4 +37,7 @@ public sealed class UserSettings
     /// <summary>Optional key that toggles the mouse lock (middle-click always toggles it too).
     /// Empty means middle-click only.</summary>
     public string MouseLockKey { get; set; } = string.Empty;
+
+    /// <summary>Key that opens dosbox's in-game menu (for swapping CDs/disks, on-screen keyboard).</summary>
+    public string MenuKey { get; set; } = "F10";
 }

@@ -48,6 +48,7 @@ public partial class PreferencesWindow : Window
         HotkeyScreenshot.Text = Display(services.Settings.ScreenshotKey, "F12");
         HotkeyRecord.Text = Display(services.Settings.RecordKey, "F9");
         HotkeyMouseLock.Text = Display(services.Settings.MouseLockKey, "Middle Mouse");
+        HotkeyMenu.Text = Display(services.Settings.MenuKey, "F10");
 
         DownloadList.ItemsSource = AssetManifest.All
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
@@ -198,7 +199,10 @@ public partial class PreferencesWindow : Window
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key == Key.Escape)
         {
-            box.Text = box == HotkeyMouseLock ? "Middle Mouse" : box == HotkeyRecord ? "F9" : "F12";
+            box.Text = box == HotkeyMouseLock ? "Middle Mouse"
+                : box == HotkeyRecord ? "F9"
+                : box == HotkeyMenu ? "F10"
+                : "F12";
             return;
         }
         box.Text = key.ToString();
@@ -209,6 +213,7 @@ public partial class PreferencesWindow : Window
         _services.Settings.ScreenshotKey = HotkeyScreenshot.Text.Trim();
         _services.Settings.RecordKey = HotkeyRecord.Text.Trim();
         _services.Settings.MouseLockKey = HotkeyMouseLock.Text == "Middle Mouse" ? string.Empty : HotkeyMouseLock.Text.Trim();
+        _services.Settings.MenuKey = HotkeyMenu.Text.Trim();
         _services.SettingsStore.Save(_services.Settings);
         Set(HotkeysStatus, "Saved — applies next launch.", Success);
     }

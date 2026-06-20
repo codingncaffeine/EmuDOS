@@ -43,6 +43,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _screenshotKey;
     private readonly Key _recordKey;
     private readonly Key? _mouseLockKey;
+    private readonly Key _menuKey;
+    private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
     private static Key ParseKey(string name, Key fallback) => Enum.TryParse<Key>(name, out var k) ? k : fallback;
 
@@ -84,6 +86,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _screenshotKey = ParseKey(settings.ScreenshotKey, Key.F12);
         _recordKey = ParseKey(settings.RecordKey, Key.F9);
         _mouseLockKey = Enum.TryParse<Key>(settings.MouseLockKey, out var mk) ? mk : null;
+        _menuKey = ParseKey(settings.MenuKey, Key.F10);
 
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
@@ -376,7 +379,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         }
     }
 
-    public bool IsButtonDown(int port, PadButton button) => false;
+    public bool IsButtonDown(int port, PadButton button) => button == PadButton.L3 && _menuHeld;
 
     // ── Input events ──────────────────────────────────────────────────────────
 
@@ -398,6 +401,14 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (_mouseLockKey is { } mouseLockKey && e.Key == mouseLockKey)
         {
             ToggleMouseLock();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == _menuKey)
+        {
+            // Held = the L3 button (see IsButtonDown), which opens dosbox's menu — where CDs/disks
+            // are swapped. Lets you change the inserted disc from inside a booted OS.
+            _menuHeld = true;
             e.Handled = true;
             return;
         }
@@ -464,6 +475,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnKeyUp(object sender, KeyEventArgs e)
     {
+        if (e.Key == _menuKey)
+        {
+            _menuHeld = false;
+            e.Handled = true;
+            return;
+        }
+
         var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
         if (key == DosKey.None)
             return;
