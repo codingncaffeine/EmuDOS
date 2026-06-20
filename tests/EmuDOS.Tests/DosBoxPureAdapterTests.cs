@@ -54,14 +54,22 @@ public class DosBoxPureAdapterTests
     }
 
     [Fact]
-    public void Disabling_ems_emits_config_override_in_bat()
+    public void Memory_flags_do_not_emit_live_config_overrides_before_launch()
     {
-        var profile = new GameProfile { Memory = new MemorySpec { Ems = false } };
+        // ems/xms/umb are live (WhenIdle) DOS settings — applying them in the autoexec faults the
+        // game launched immediately after, so we must not emit them.
+        var profile = new GameProfile
+        {
+            Memory = new MemorySpec { Ems = false, Xms = false, Umb = false },
+            Launch = new LaunchSpec { Executable = "GAME.EXE" },
+        };
 
         var bat = DosBoxPureAdapter.BuildAutoexecBat(profile);
 
-        Assert.Contains("dos ems=false", bat);
+        Assert.DoesNotContain("dos ems=false", bat);
         Assert.DoesNotContain("dos xms=false", bat);
+        Assert.DoesNotContain("dos umb=false", bat);
+        Assert.Contains("@GAME.EXE", bat);
     }
 
     [Fact]

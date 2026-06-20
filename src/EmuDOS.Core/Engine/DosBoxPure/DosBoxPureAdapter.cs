@@ -95,13 +95,12 @@ public static class DosBoxPureAdapter
         var sb = new StringBuilder();
         sb.AppendLine("@ECHO OFF");
 
-        // dosbox_pure can't split EMS/XMS via options; realize the intent at the DOS prompt.
-        if (!profile.Memory.Ems)
-            sb.AppendLine("@config -set \"dos ems=false\"");
-        if (!profile.Memory.Xms)
-            sb.AppendLine("@config -set \"dos xms=false\"");
-        if (!profile.Memory.Umb)
-            sb.AppendLine("@config -set \"dos umb=false\"");
+        // NOTE: we deliberately do NOT emit "@config -set dos ems/xms/umb=false" here. Those DOS
+        // memory settings are live (Changeable::WhenIdle), so applying them in the autoexec takes
+        // effect WHILE the game is starting — yanking memory out from under it and faulting it
+        // ("illegal operation", or a fall-through into another .bat). The curated seed disables EMS
+        // aggressively and it rarely helps; a clean launch wins. (Memory *size* is still applied via
+        // the dosbox_pure_memory_size core option, which is set at boot.)
 
         // Gameport joystick type: set the emulated stick the game expects (Auto = default).
         if (profile.Joystick.Type != JoystickType.Auto)
