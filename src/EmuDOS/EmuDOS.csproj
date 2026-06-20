@@ -45,4 +45,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- Release packaging: a single self-contained EmuDOS.exe (the MT-32 shim and everything else
+       bundled in; only README.txt sits beside it). Applies only to a self-contained publish (a
+       RuntimeIdentifier is set), so plain dev builds/tests are unaffected. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
 </Project>
