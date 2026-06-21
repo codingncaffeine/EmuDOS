@@ -17,6 +17,16 @@ build-stage/
 *.nupkg
 packages/
 
+# Test output / coverage and local test scratch (never pushed)
+[Tt]est[Rr]esults/
+*.coverage
+*.cobertura.xml
+coverage*.json
+[Cc]overage/
+scratch/
+test-data/
+test-games/
+
 # Local-only planning / design notes (never pushed — public repo)
 local-notes/
 
