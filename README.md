@@ -6,37 +6,28 @@ A good-looking, Boxer-style DOS gaming frontend for Windows. Drop your games in 
 
 Inspired by [Boxer](http://boxerapp.com/) for the Mac, built Windows-first.
 
-> **New here? See the [User Guide](docs/GUIDE.md)** for how to use everything.
+> **📖 Full documentation is on the [Wiki](https://github.com/codingncaffeine/EmuDOS/wiki)** — features, usage, and the tech behind it. (The same guide ships with the app as `README.txt`.)
 
-## Features
+## Highlights
 
-- **Bookshelf library** — your games as box art on a shelf; drag to arrange in edit mode.
-- **Drag-and-drop import** — drop a folder or `.zip`; EmuDOS finds the program to run (and ignores DOS extenders/installers), then applies curated settings if it recognizes the game.
-- **Automatic box art** — from ScreenScraper, with SteamGridDB as a fallback for anything it misses (log in under Preferences → Snaps).
-- **Manuals** — right-click → *Download manual* (ScreenScraper, with an Internet Archive fallback), saved per game.
-- **Per-game settings** — CPU cycles, machine type, memory, Sound Blaster/MIDI device, aspect correction, and brightness/gamma, saved as an override that survives catalog updates.
-- **Roland MT-32** — drop the ROMs in and MT-32 games just use them, with an on-screen dot-matrix LCD on a picture of the unit. (ROMs are user-supplied — see below.)
-- **Save states**, **per-game window size memory**, and a **smart launcher** that auto-detects the game program (with *Choose program…* to override and remember a different one).
-- **FPS mouse lock** — middle-click (or a remappable key) to lock/unlock the mouse in-game; scroll wheel adjusts sensitivity live.
-- **Screenshots & recording** — `F12` captures a screenshot, `F9` records gameplay video (via FFmpeg); folders, quality, and the keys are configurable under Preferences → *Media* and *Hotkeys*.
-- **Open in DOS** — boot a game straight to the `C:\` prompt to run its `SETUP`, poke around, or pick a different executable.
-- **Downloads tab** — fetches the emulator core and game catalog on demand, and tells you whether your MT-32 ROMs are in place.
+- **Bookshelf library** — your games as box art on a shelf; drop a folder, `.zip`, or CD image to import.
+- **2D & 3D box art** — downloaded automatically (ScreenScraper, with a SteamGridDB fallback); choose 2D or 3D per game or library-wide, or drop in your own cover.
+- **Just-works settings** — a curated catalog applies known-good DOSBox options on import; everything is overridable per game and survives updates.
+- **Discs & Windows** — multi-disc games, disc swapping, and installing/booting a full Windows 9x.
+- **Roland MT-32** — drop the ROMs in and MT-32 games use them, with an on-screen dot-matrix LCD.
+- **Save states**, **screenshots/recording**, **mouse lock**, and a **smart launcher** that picks the right program.
+
+See the **[Wiki](https://github.com/codingncaffeine/EmuDOS/wiki)** for the details on all of these.
 
 ## Quick start
 
 1. Install the **.NET 10 SDK**.
 2. `dotnet build -c Release`
 3. Run `EmuDOS.exe`. On first launch it downloads the DOSBox Pure core (Preferences → Downloads).
-4. Drag a game folder or `.zip` onto the window. It appears on the shelf with art.
-5. Click a box to play. Right-click for options (Preferences, Open in DOS, Download manual, Run ▸).
+4. Drag a game folder, `.zip`, or disc image onto the window. It appears on the shelf with art.
+5. Click a box to play; right-click for options.
 
-Full walkthrough: **[docs/GUIDE.md](docs/GUIDE.md)**.
-
-## How it works
-
-Games run through the **dosbox_pure** libretro core — loaded directly from a folder or archive, no extraction or manual config. Each game lives in a self-contained **gamebox** folder (its profile, content, media, saves, and per-game state), so backing up or moving the folder moves the whole game; the library database is just a rebuildable index over those folders.
-
-A curated **catalog** (seeded from the eXoDOS configuration set) recognizes games and applies known-good DOSBox settings on import.
+Games run through the **dosbox_pure** libretro core, loaded directly with no manual config. Each game is a self-contained **gamebox** folder, so backing up or moving the folder moves the whole game — the library database is just a rebuildable index over those folders. See [How It Works](https://github.com/codingncaffeine/EmuDOS/wiki/How-It-Works) for the full picture.
 
 ## Project layout
 
