@@ -93,13 +93,29 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             else
             {
                 executables = FindExecutables(box.ContentDir);
-                (classification, chosen) = Classify(executables, title);
-                profile = new GameProfile
+
+                // A zip/folder that is essentially just a CD image (a disc image present, with no
+                // loose game program to run) is a CD game to install. Treat it as one so it mounts
+                // via dosbox_pure's native disc loader — which reads long, spaced, multi-track
+                // cue/bin names host-side — and boots to its installer. The autoexec IMGMOUNT path
+                // can't open such filenames from inside the C: mount.
+                if (executables.Count == 0 && FindMountableDisc(box.ContentDir) is not null)
                 {
-                    Title = title,
-                    SourceMedia = media,
-                    Launch = new LaunchSpec { Executable = chosen },
-                };
+                    media = SourceMediaType.Iso;
+                    classification = ImportClassification.NeedsInstall;
+                    chosen = null;
+                    profile = new GameProfile { Title = title, SourceMedia = media, Launch = new LaunchSpec() };
+                }
+                else
+                {
+                    (classification, chosen) = Classify(executables, title);
+                    profile = new GameProfile
+                    {
+                        Title = title,
+                        SourceMedia = media,
+                        Launch = new LaunchSpec { Executable = chosen },
+                    };
+                }
             }
 
             // Enrich with curated config if the catalog recognizes the content (not for raw discs).
@@ -118,7 +134,8 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             // dosbox resolves a bare path against the host CWD, but c:\ traverses the mounted content.
             // And it's -t cdrom (not -t iso) — the only type that registers MSCDEX and reads raw
             // MODE1/2352 cue/bin correctly (and keeps CD audio).
-            if (discMount is null && FindMountableDisc(box.ContentDir) is { } innerDisc
+            if (discMount is null && profile.SourceMedia != SourceMediaType.Iso
+                && FindMountableDisc(box.ContentDir) is { } innerDisc
                 && !profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase)))
             {
                 var pre = new List<string> { $"IMGMOUNT D: \"c:\\{innerDisc}\" -t cdrom" };
