@@ -107,12 +107,15 @@ public partial class PreferencesWindow : Window
 
         BrightnessSlider.Value = _profile.Display.Brightness;
         GammaSlider.Value = _profile.Display.Gamma;
-        OnDisplaySliderChanged(this, default);
+        UpdateDisplayValues();
 
         GameOptionsStatus.Text = string.Empty;
     }
 
-    private void OnDisplaySliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnDisplaySliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+        UpdateDisplayValues();
+
+    private void UpdateDisplayValues()
     {
         if (BrightnessValue is not null)
             BrightnessValue.Text = BrightnessSlider.Value.ToString("0.00");

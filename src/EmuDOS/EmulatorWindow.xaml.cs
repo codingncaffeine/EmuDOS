@@ -73,7 +73,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private bool _mouseLocked;
     private bool _mouseLeft;
     private bool _mouseRight;
-    private bool _mouseMiddle;
     private DispatcherTimer? _hintTimer;
     private Point? _lastMouse;
 
@@ -379,7 +378,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             int dy = (int)_mouseAccumY;
             _mouseAccumX -= dx; // carry the sub-pixel remainder
             _mouseAccumY -= dy;
-            return new MouseDelta(dx, dy, _mouseLeft, _mouseRight, _mouseMiddle);
+            // Middle button is the mouse-lock toggle (handled separately), never forwarded to the game.
+            return new MouseDelta(dx, dy, _mouseLeft, _mouseRight, false);
         }
     }
 

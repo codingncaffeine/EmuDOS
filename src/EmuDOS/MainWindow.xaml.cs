@@ -12,6 +12,7 @@ using System.Windows.Media.Imaging;
 using EmuDOS.Controls;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Engine.DosBoxPure;
+using EmuDOS.Core.Import;
 using EmuDOS.Core.Model;
 using EmuDOS.ViewModels;
 
@@ -65,6 +66,9 @@ public partial class MainWindow : Window
         var openInDos = new MenuItem { Header = "Open in DOS" };
         openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
 
+        var launchParams = new MenuItem { Header = "Launch parameters…" };
+        launchParams.Click += (_, _) => EditLaunchParameters(tile);
+
         var boxArt = new MenuItem { Header = "Download box art" };
         boxArt.Click += async (_, _) => await (Vm?.DownloadArtAsync(tile) ?? Task.CompletedTask);
 
@@ -94,6 +98,7 @@ public partial class MainWindow : Window
 
         menu.Items.Add(preferences);
         menu.Items.Add(openInDos);
+        menu.Items.Add(launchParams);
         menu.Items.Add(boxArt);
         menu.Items.Add(box3D);
         menu.Items.Add(customArt);
@@ -128,6 +133,28 @@ public partial class MainWindow : Window
 
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    // Edit the command-line arguments passed to the game's program on launch (persisted to the
+    // profile). Some games need a sound/mode switch and have no SETUP to do it.
+    private void EditLaunchParameters(GameTile tile)
+    {
+        var services = ((App)Application.Current).Services;
+        var profile = services.Store.ReadProfile(tile.Game.GameboxPath);
+
+        var dialog = new TextPromptDialog(
+            $"Launch parameters — {tile.Title}",
+            "Command-line arguments passed to the game's program when it starts (e.g. a sound-mode switch some games need). Leave blank for none.",
+            profile.Launch.Arguments) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var args = string.IsNullOrWhiteSpace(dialog.Value) ? null : dialog.Value;
+        var updated = profile with { Launch = profile.Launch with { Arguments = args } };
+        services.Store.WriteProfile(tile.Game.GameboxPath, updated);
+        Vm?.Report(
+            args is null ? $"Cleared launch parameters for {tile.Title}." : $"Launch parameters set: {args}",
+            busy: false);
     }
 
     private async void ChooseProgram(GameTile tile, List<string> executables)
@@ -182,34 +209,38 @@ public partial class MainWindow : Window
     /// game engine dwarfs config/registration helpers) — skipping installers and setup tools.</summary>
     private static string? BestGameExecutable(string contentDir, string title)
     {
-        var candidates = ScanExecutables(contentDir).Where(e => !IsSetupLike(e)).ToList();
+        var candidates = ScanExecutables(contentDir)
+            .Where(e => !IsSetupLike(e) && !DosExecutables.IsRuntimeHelper(e))
+            .ToList();
         if (candidates.Count == 0)
             return null;
 
-        // 1. Name matches the title (e.g. ABUSE.EXE for "Abuse", SKY.EXE for "Beneath a Steel Sky").
-        static string Key(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-        var titleKey = Key(title);
-        if (titleKey.Length > 0)
-        {
-            var match = candidates.FirstOrDefault(e =>
-            {
-                var key = Key(Path.GetFileNameWithoutExtension(e));
-                return key.Length > 0 && (key.Contains(titleKey) || titleKey.Contains(key));
-            });
-            if (match is not null)
-                return match;
-        }
+        // 1. Name matches the title — exact word, substring, initials, or first-word prefix
+        //    (handles abbreviated/truncated exe names). See DosExecutables.TitleMatches.
+        var titled = candidates.FirstOrDefault(e => DosExecutables.TitleMatches(e, title));
+        if (titled is not null)
+            return titled;
 
-        // 2. The largest executable — the game engine dwarfs config/registration/splash helpers
-        //    (DUKE3D.EXE at 1.2 MB vs SETMAIN/COMMIT in the tens of KB). This is the first-launch
-        //    guess; once the user runs the real program from DOS, that capture takes over.
+        // 2. A canonical launcher (SIERRA.EXE, RUN.BAT, …). Sierra SCI games have no title-named
+        //    exe, so without this they fall to the largest exe — which can be a big utility like a
+        //    DVD-prep wizard rather than the game's own SIERRA.EXE interpreter.
+        var known = candidates.FirstOrDefault(DosExecutables.IsKnownLauncher);
+        if (known is not null)
+            return known;
+
+        // 3. The largest executable — the game engine (often 1+ MB) dwarfs the tens-of-KB
+        //    config/registration/splash helpers. This is the first-launch guess; once the user
+        //    runs the real program from DOS, that capture takes over.
+        //    Bundled utilities (a DVD-prep wizard, a patcher) are ranked last so a big tool never
+        //    outweighs the actual game.
         static long Size(string p) { try { return new FileInfo(p).Length; } catch { return 0; } }
-        var largest = candidates
-            .Select(e => (exe: e, size: Size(Path.Combine(contentDir, e))))
-            .OrderByDescending(x => x.size)
+        var best = candidates
+            .Select(e => (exe: e, size: Size(Path.Combine(contentDir, e)), util: DosExecutables.IsLikelyUtility(e)))
+            .OrderBy(x => x.util)
+            .ThenByDescending(x => x.size)
             .FirstOrDefault();
-        return largest.size > 0
-            ? largest.exe
+        return best.size > 0
+            ? best.exe
             : (candidates.FirstOrDefault(e => e.Contains('\\')) ?? candidates[0]);
     }
 
@@ -522,7 +553,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        Vm.ClearSelection();
+        Vm?.ClearSelection();
         await LaunchGameAsync(tile);
     }
 

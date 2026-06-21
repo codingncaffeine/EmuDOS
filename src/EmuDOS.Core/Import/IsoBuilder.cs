@@ -8,6 +8,7 @@ namespace EmuDOS.Core.Import;
 /// Mastering API (IMAPI2). Turns loose game files — or a folder a user extracted from a rip the
 /// emulator can't read (e.g. UDF) — into a disc that dosbox and a guest OS can mount.
 /// </summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public static class IsoBuilder
 {
     private const int FsiFileSystemISO9660 = 1;

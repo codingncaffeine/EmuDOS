@@ -165,6 +165,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
             else
             {
+                _services.SystemLog.Info($"Import failed (disc set, {set.Count} discs): {result.Error}");
                 Report($"Couldn't import discs: {result.Error}", busy: false);
                 hadError = true;
             }
@@ -185,6 +186,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
             else
             {
+                _services.SystemLog.Info($"Import failed for '{name}' [{path}]: {result.Error}");
                 Report($"Couldn't import {name}: {result.Error}", busy: false);
                 hadError = true;
             }
@@ -192,8 +194,13 @@ public sealed partial class MainViewModel : ObservableObject
 
         LoadLibrary();
         if (hadError)
+        {
+            // Leave the error on screen — don't run the art sweep, which would overwrite it.
             IsBusy = false;
-        else if (warning is not null)
+            return;
+        }
+
+        if (warning is not null)
             Report(warning, busy: false);
         else if (installHint is not null)
             Report(installHint, busy: false);

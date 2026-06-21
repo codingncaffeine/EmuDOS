@@ -27,10 +27,11 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        string? gameboxPath = null;
         try
         {
             var title = DeriveTitle(sourcePath);
-            var gameboxPath = AllocateGameboxPath(title);
+            gameboxPath = AllocateGameboxPath(title);
             var box = new Gamebox(gameboxPath);
             Directory.CreateDirectory(box.ContentDir);
 
@@ -83,9 +84,10 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 {
                     Title = title,
                     SourceMedia = media,
-                    // Relative path (resolved via C:'s underlying local drive) — an absolute C:\ path
-                    // lands inside dosbox_pure's union mount, where IMGMOUNT can't reach the host file.
-                    Launch = new LaunchSpec { PreCommands = [$"IMGMOUNT D: \"{discMount}\" -t iso"] },
+                    // C: drive path + -t cdrom: dosbox resolves a bare relative path against the host
+                    // CWD, but c:\ traverses the mounted content; -t cdrom registers MSCDEX (a data-only
+                    // -t iso doesn't) and reads cue/bin correctly.
+                    Launch = new LaunchSpec { PreCommands = [$"IMGMOUNT D: \"c:\\{discMount}\" -t cdrom"] },
                 };
             }
             else
@@ -109,6 +111,21 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 profile = resolver.Resolve(profile, contentFiles!);
             }
 
+            // A folder/zip game that ships a CD image inside it (e.g. a cd\*.cue) needs that disc
+            // mounted as D:, or it asks for "disk 1". Add the mount unless one is already present.
+            // Done after the resolver, whose curated launch can drop pre-commands.
+            // NOTE: the image is referenced via the C: drive path (c:\...), not a bare relative path:
+            // dosbox resolves a bare path against the host CWD, but c:\ traverses the mounted content.
+            // And it's -t cdrom (not -t iso) — the only type that registers MSCDEX and reads raw
+            // MODE1/2352 cue/bin correctly (and keeps CD audio).
+            if (discMount is null && FindMountableDisc(box.ContentDir) is { } innerDisc
+                && !profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase)))
+            {
+                var pre = new List<string> { $"IMGMOUNT D: \"c:\\{innerDisc}\" -t cdrom" };
+                pre.AddRange(profile.Launch.PreCommands);
+                profile = profile with { Launch = profile.Launch with { PreCommands = pre } };
+            }
+
             store.WriteProfile(gameboxPath, profile);
 
             return new ImportResult
@@ -123,8 +140,23 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
         }
         catch (Exception ex)
         {
+            DeleteOrphanGamebox(gameboxPath); // don't leave a half-created folder (it bumps the next try to "(2)")
             return new ImportResult { Success = false, Error = ex.Message };
         }
+    }
+
+    // Remove a gamebox folder created for an import that then failed, so failed attempts don't pile
+    // up empty folders that also bump later imports to "(2)", "(3)", …
+    private static void DeleteOrphanGamebox(string? gameboxPath)
+    {
+        if (gameboxPath is null)
+            return;
+        try
+        {
+            if (Directory.Exists(gameboxPath))
+                Directory.Delete(gameboxPath, recursive: true);
+        }
+        catch { /* locked — leave it; better than throwing while already handling a failure */ }
     }
 
     private static bool IsArchive(string path) =>
@@ -216,13 +248,14 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
         ArgumentNullException.ThrowIfNull(discPaths);
         if (discPaths.Count == 0)
             return new ImportResult { Success = false, Error = "No discs to import." };
+        string? gameboxPath = null;
         try
         {
             var title = StripDiscMarker(Path.GetFileNameWithoutExtension(discPaths[0]));
             if (string.IsNullOrWhiteSpace(title))
                 title = "Untitled";
 
-            var gameboxPath = AllocateGameboxPath(title);
+            gameboxPath = AllocateGameboxPath(title);
             var box = new Gamebox(gameboxPath);
             Directory.CreateDirectory(box.ContentDir);
 
@@ -244,6 +277,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
         }
         catch (Exception ex)
         {
+            DeleteOrphanGamebox(gameboxPath); // don't leave a half-created folder behind on failure
             return new ImportResult { Success = false, Error = ex.Message };
         }
     }
@@ -277,10 +311,16 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
         if (safe.Length == 0)
             safe = "game";
 
+        // Skip past folders that are REAL gameboxes (they have a profile.json) so we never clobber an
+        // existing game's content/saves. We stop at the first name that's free OR that's an orphan
+        // (a folder left by an earlier failed import) — which we reuse instead of spawning a "(2)".
         var candidate = Path.Combine(paths.GameboxesDir, safe);
         var n = 2;
-        while (Directory.Exists(candidate))
+        while (Directory.Exists(candidate) && new Gamebox(candidate).Exists)
             candidate = Path.Combine(paths.GameboxesDir, $"{safe} ({n++})");
+
+        if (Directory.Exists(candidate))
+            DeleteOrphanGamebox(candidate); // reuse the orphan's name; clear its stale partial content
         return candidate;
     }
 
@@ -308,6 +348,19 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    // A CD image bundled inside a game folder (commonly a cd\*.cue), to mount as D:. Prefers a .cue
+    // (carries CD audio), then .iso, then .chd. Relative DOS path; null if the folder ships no disc.
+    private static string? FindMountableDisc(string contentDir) =>
+        Directory.EnumerateFiles(contentDir, "*", SearchOption.AllDirectories)
+            .Where(f => f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)
+                     || f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)
+                     || f.EndsWith(".chd", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f.EndsWith(".cue", StringComparison.OrdinalIgnoreCase) ? 0
+                        : f.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) ? 1 : 2)
+            .ThenBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .Select(f => Path.GetRelativePath(contentDir, f).Replace('/', '\\'))
+            .FirstOrDefault();
+
     private static (ImportClassification, string?) Classify(List<string> executables, string title)
     {
         // A DOS extender means the real launcher is almost always a .bat that invokes it.
@@ -330,21 +383,25 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
 
     private static string PickBest(List<string> candidates, string title, bool preferBat)
     {
-        var titleTokens = title.Split([' ', '_', '-', '.'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(t => t.ToLowerInvariant())
-            .ToHashSet();
-
-        var titled = candidates.FirstOrDefault(c =>
-            titleTokens.Contains(Path.GetFileNameWithoutExtension(c).ToLowerInvariant()));
+        var titled = candidates.FirstOrDefault(c => DosExecutables.TitleMatches(c, title));
         if (titled is not null)
             return titled;
+
+        // A canonical launcher (SIERRA.EXE, RUN.BAT, …) beats the generic guesses below — Sierra
+        // games have no title-named exe and would otherwise fall to the largest/first executable.
+        var known = candidates.FirstOrDefault(DosExecutables.IsKnownLauncher);
+        if (known is not null)
+            return known;
 
         // Extender-based game (e.g. DOS/4GW): the launcher batch is the right target, not the raw exe.
         if (preferBat
             && candidates.FirstOrDefault(c => c.EndsWith(".bat", StringComparison.OrdinalIgnoreCase)) is { } bat)
             return bat;
 
-        return candidates.FirstOrDefault(c => c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        // Prefer a real .exe over a bundled utility (patcher, prep wizard, …) when guessing.
+        var exes = candidates.Where(c => c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)).ToList();
+        return exes.FirstOrDefault(c => !DosExecutables.IsLikelyUtility(c))
+            ?? exes.FirstOrDefault()
             ?? candidates[0];
     }
 }
