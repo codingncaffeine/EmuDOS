@@ -8,6 +8,9 @@ public sealed class ArtService(ScreenScraperClient screenScraper, SteamGridDbCli
 {
     public const string BoxFrontFileName = "box-front.png";
 
+    /// <summary>The 3D box render, stored alongside the 2D <see cref="BoxFrontFileName"/>.</summary>
+    public const string Box3DFileName = "box-3d.png";
+
     /// <summary>
     /// Fetch a game's box cover and save it as <c>box-front.png</c> in <paramref name="mediaDir"/>.
     /// Returns the saved path, or null if no art was found from any source.
@@ -24,6 +27,24 @@ public sealed class ArtService(ScreenScraperClient screenScraper, SteamGridDbCli
 
         Directory.CreateDirectory(mediaDir);
         var path = Path.Combine(mediaDir, BoxFrontFileName);
+        await File.WriteAllBytesAsync(path, bytes!, cancellationToken);
+        return path;
+    }
+
+    /// <summary>
+    /// Fetch a game's 3D box render and save it as <c>box-3d.png</c> in <paramref name="mediaDir"/>.
+    /// ScreenScraper-only (no SteamGridDB 3D). Returns the saved path, or null if none was found.
+    /// </summary>
+    public async Task<string?> FetchBox3DAsync(
+        string gameName, string mediaDir, CancellationToken cancellationToken = default)
+    {
+        var url = await screenScraper.FindBox3DUrlAsync(gameName, cancellationToken);
+        var bytes = url is null ? null : await screenScraper.DownloadAsync(url, cancellationToken);
+        if (!IsUsable(bytes))
+            return null;
+
+        Directory.CreateDirectory(mediaDir);
+        var path = Path.Combine(mediaDir, Box3DFileName);
         await File.WriteAllBytesAsync(path, bytes!, cancellationToken);
         return path;
     }

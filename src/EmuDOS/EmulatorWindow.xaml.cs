@@ -44,6 +44,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _recordKey;
     private readonly Key? _mouseLockKey;
     private readonly Key _menuKey;
+    private readonly Key _saveStateKey;
+    private readonly Key _loadStateKey;
     private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
     private static Key ParseKey(string name, Key fallback) => Enum.TryParse<Key>(name, out var k) ? k : fallback;
@@ -87,6 +89,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _recordKey = ParseKey(settings.RecordKey, Key.F9);
         _mouseLockKey = Enum.TryParse<Key>(settings.MouseLockKey, out var mk) ? mk : null;
         _menuKey = ParseKey(settings.MenuKey, Key.F10);
+        _saveStateKey = ParseKey(settings.SaveStateKey, Key.F5);
+        _loadStateKey = ParseKey(settings.LoadStateKey, Key.F8);
 
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
@@ -385,26 +389,30 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
+        // System keys (F10, Alt combos) arrive as Key.System with the real key in SystemKey;
+        // compare hotkeys against the unwrapped key or an F10 binding never matches.
+        var effective = e.Key == Key.System ? e.SystemKey : e.Key;
+
         // Bound hotkeys are handled here and not forwarded to the game.
-        if (e.Key == _screenshotKey)
+        if (effective == _screenshotKey)
         {
             CaptureScreenshot();
             e.Handled = true;
             return;
         }
-        if (e.Key == _recordKey)
+        if (effective == _recordKey)
         {
             ToggleRecording();
             e.Handled = true;
             return;
         }
-        if (_mouseLockKey is { } mouseLockKey && e.Key == mouseLockKey)
+        if (_mouseLockKey is { } mouseLockKey && effective == mouseLockKey)
         {
             ToggleMouseLock();
             e.Handled = true;
             return;
         }
-        if (e.Key == _menuKey)
+        if (effective == _menuKey)
         {
             // Held = the L3 button (see IsButtonDown), which opens dosbox's menu — where CDs/disks
             // are swapped. Lets you change the inserted disc from inside a booted OS.
@@ -412,8 +420,20 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
+        if (effective == _saveStateKey)
+        {
+            QuickSaveState();
+            e.Handled = true;
+            return;
+        }
+        if (effective == _loadStateKey)
+        {
+            QuickLoadState();
+            e.Handled = true;
+            return;
+        }
 
-        var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
+        var key = KeyMap.ToDosKey(effective);
         if (key == DosKey.None)
             return;
 
@@ -475,14 +495,16 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private void OnKeyUp(object sender, KeyEventArgs e)
     {
-        if (e.Key == _menuKey)
+        var effective = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        if (effective == _menuKey)
         {
             _menuHeld = false;
             e.Handled = true;
             return;
         }
 
-        var key = KeyMap.ToDosKey(e.Key == Key.System ? e.SystemKey : e.Key);
+        var key = KeyMap.ToDosKey(effective);
         if (key == DosKey.None)
             return;
 
@@ -685,6 +707,15 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private static string SafeName(string title) =>
         string.Concat(title.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+
+    // Quick save/load use slot 0; the session writes state0.sav into the gamebox's saves folder.
+    private const int QuickSaveSlot = 0;
+
+    private void QuickSaveState() =>
+        ShowHint(_session.SaveState(QuickSaveSlot) ? "Quick save written" : "Save state failed");
+
+    private void QuickLoadState() =>
+        ShowHint(_session.LoadState(QuickSaveSlot) ? "Quick save loaded" : "No quick save to load");
 
     private void ShowHint(string text, double seconds = 1.3)
     {

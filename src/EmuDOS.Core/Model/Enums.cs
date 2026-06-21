@@ -1,5 +1,17 @@
 namespace EmuDOS.Core.Model;
 
+/// <summary>
+/// How a game's box is shown on the shelf. <see cref="Default"/> follows the global
+/// <c>UserSettings.Use3DBoxes</c> preference; <see cref="TwoD"/>/<see cref="ThreeD"/> override it
+/// per game (for when one style's art is poor for a particular title).
+/// </summary>
+public enum BoxStyle
+{
+    Default,
+    TwoD,
+    ThreeD,
+}
+
 /// <summary>What the user dropped in to create the gamebox.</summary>
 public enum SourceMediaType
 {

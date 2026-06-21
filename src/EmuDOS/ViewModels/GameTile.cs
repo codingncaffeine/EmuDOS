@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using EmuDOS.Core.Library;
+using EmuDOS.Core.Model;
 using EmuDOS.Metadata;
 
 namespace EmuDOS.ViewModels;
@@ -10,6 +11,7 @@ namespace EmuDOS.ViewModels;
 public sealed partial class GameTile : ObservableObject
 {
     private readonly LibraryGame _game;
+    private bool _prefer3D;
 
     [ObservableProperty]
     private BitmapImage? _cover;
@@ -17,11 +19,34 @@ public sealed partial class GameTile : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
-    public GameTile(LibraryGame game)
+    public GameTile(LibraryGame game, BoxStyle styleOverride = BoxStyle.Default, bool globalUse3D = false)
     {
         _game = game;
+        StyleOverride = styleOverride;
+        _prefer3D = ResolvePrefer3D(styleOverride, globalUse3D);
         LoadCover();
     }
+
+    /// <summary>This game's per-game box-style override (Default = follow the global setting).</summary>
+    public BoxStyle StyleOverride { get; private set; }
+
+    private static bool ResolvePrefer3D(BoxStyle styleOverride, bool globalUse3D) => styleOverride switch
+    {
+        BoxStyle.TwoD => false,
+        BoxStyle.ThreeD => true,
+        _ => globalUse3D,
+    };
+
+    /// <summary>Re-resolve the effective style (after a global or per-game change) and reload the cover.</summary>
+    public void ApplyStyle(BoxStyle styleOverride, bool globalUse3D)
+    {
+        StyleOverride = styleOverride;
+        _prefer3D = ResolvePrefer3D(styleOverride, globalUse3D);
+        LoadCover();
+    }
+
+    /// <summary>Whether a 3D box render has been downloaded for this game.</summary>
+    public bool Has3D => File.Exists(Box3DPath);
 
     public long Id => _game.Id;
 
@@ -50,22 +75,40 @@ public sealed partial class GameTile : ObservableObject
 
     public string BoxFrontPath => Path.Combine(MediaDir, ArtService.BoxFrontFileName);
 
-    /// <summary>(Re)load the cover from the gamebox media folder, if present.</summary>
+    public string Box3DPath => Path.Combine(MediaDir, ArtService.Box3DFileName);
+
+    /// <summary>(Re)load the cover from the gamebox media folder, honouring the effective box style.
+    /// Falls back to the other style's file when the preferred one hasn't been downloaded.</summary>
     public void LoadCover()
     {
-        if (!File.Exists(BoxFrontPath))
+        var preferred = _prefer3D ? Box3DPath : BoxFrontPath;
+        var fallback = _prefer3D ? BoxFrontPath : Box3DPath;
+        var source = File.Exists(preferred) ? preferred
+                   : File.Exists(fallback) ? fallback
+                   : null;
+        if (source is null)
         {
             Cover = null;
             return;
         }
 
-        var image = new BitmapImage();
-        image.BeginInit();
-        image.CacheOption = BitmapCacheOption.OnLoad; // don't lock the file
-        image.UriSource = new Uri(BoxFrontPath);
-        image.EndInit();
-        image.Freeze();
-        Cover = image;
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad; // read fully now; don't lock the file
+            // IgnoreImageCache forces a re-read from disk every load: WPF otherwise caches decoded
+            // images by URI, so a replaced cover (dropped or chosen) would show the stale image.
+            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            image.UriSource = new Uri(source);
+            image.EndInit();
+            image.Freeze();
+            Cover = image;
+        }
+        catch
+        {
+            Cover = null;
+        }
     }
 
     // When the cover arrives, the box resizes to its real aspect.

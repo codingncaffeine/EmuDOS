@@ -48,6 +48,24 @@ public sealed partial class ScreenScraperClient
         return null;
     }
 
+    /// <summary>
+    /// Find the best 3D box-render URL for a DOS game (ScreenScraper's <c>box-3D</c> media).
+    /// Null if the game has no 3D box. There is no SteamGridDB equivalent, so this is SS-only.
+    /// </summary>
+    public async Task<string?> FindBox3DUrlAsync(string gameName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+
+        foreach (var candidate in NameCandidates(gameName))
+        {
+            var url = await FetchMediaForNameAsync(candidate, PickBox3D, cancellationToken);
+            if (url is not null)
+                return url;
+        }
+
+        return null;
+    }
+
     /// <summary>Find the game's manual (PDF) URL, or null if ScreenScraper has none.</summary>
     public async Task<string?> FindManualUrlAsync(string gameName, CancellationToken cancellationToken = default)
     {
@@ -65,23 +83,33 @@ public sealed partial class ScreenScraperClient
 
     /// <summary>
     /// Verify the configured user login (with the dev creds) via <c>ssuserInfos.php</c>.
-    /// Returns true only when ScreenScraper recognises the account.
+    /// Returns whether the account is recognised and its <c>maxthreads</c> allowance — the number
+    /// of concurrent API requests the account may make (paid tiers get more; free/anonymous = 1).
     /// </summary>
-    public async Task<bool> ValidateLoginAsync(CancellationToken cancellationToken = default)
+    public async Task<(bool Ok, int MaxThreads)> ValidateLoginAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             using var response = await _http.GetAsync($"{BaseUrl}ssuserInfos.php?{Auth()}", cancellationToken);
             if (!response.IsSuccessStatusCode)
-                return false;
+                return (false, 1);
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             var doc = JsonNode.Parse(body);
-            return (doc?["response"]?["ssuser"] ?? doc?["ssuser"]) is not null;
+            var ssuser = doc?["response"]?["ssuser"] ?? doc?["ssuser"];
+            if (ssuser is null)
+                return (false, 1);
+
+            // ScreenScraper returns maxthreads as a string; be tolerant of a numeric node too.
+            var maxThreads = 1;
+            if (ssuser["maxthreads"] is { } node && int.TryParse(node.ToString(), out var parsed) && parsed > 0)
+                maxThreads = parsed;
+
+            return (true, maxThreads);
         }
         catch
         {
-            return false;
+            return (false, 1);
         }
     }
 
@@ -159,6 +187,31 @@ public sealed partial class ScreenScraperClient
         }
 
         return null;
+    }
+
+    private static string? PickBox3D(JsonArray medias) => PickBoxOfType(medias, "box-3D");
+
+    // Pick the best media whose type starts with boxType, honouring region preference.
+    private static string? PickBoxOfType(JsonArray medias, string boxType)
+    {
+        var boxes = medias
+            .Where(m => (m?["type"]?.GetValue<string>() ?? string.Empty)
+                .StartsWith(boxType, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (boxes.Count == 0)
+            return null;
+
+        foreach (var region in RegionPreference)
+        {
+            var match = boxes.FirstOrDefault(b =>
+                string.Equals(b?["region"]?.GetValue<string>(), region, StringComparison.OrdinalIgnoreCase)
+                || (b?["type"]?.GetValue<string>() ?? string.Empty)
+                    .EndsWith("-" + region, StringComparison.OrdinalIgnoreCase));
+            if (match?["url"]?.GetValue<string>() is { Length: > 0 } regionalUrl)
+                return regionalUrl;
+        }
+
+        return boxes[0]?["url"]?.GetValue<string>() is { Length: > 0 } anyUrl ? anyUrl : null;
     }
 
     private static string? PickManual(JsonArray medias)

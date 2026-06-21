@@ -41,13 +41,15 @@ You can drop **multiple** items at once. You can also drop a **folder of MT-32 R
 
 Drop a **`.iso`**, **`.cue`**/**`.bin`**, or **`.chd`** and EmuDOS imports it as a CD game, mounting the disc as a CD-ROM on launch. Run the disc's installer (`SETUP` or `INSTALL`); the game installs onto a writable **C:** drive, and from then on it launches into the installed program.
 
-**Multi-disc games** — select a game's discs (e.g. `Game (Disc 1).iso` and `Game (Disc 2).iso`) and **drop them together**. EmuDOS imports them as a single game with all discs attached; swap between them from the emulator's start menu while playing.
+**Multi-disc games** — select a game's discs (e.g. `Game (Disc 1).iso` and `Game (Disc 2).iso`) and **drop them together**. EmuDOS imports them as a single game with all discs attached. To attach more discs to an existing game later, right-click → **Add disc…**.
+
+**Swapping discs while playing** — all of a game's discs are mounted up front, so a game (or installer) that asks for "Disc 2" never needs a restart. Press **F10** to open the emulator's menu, choose the disc you want, and it swaps in automatically — there's no need to eject or unmount the current disc first. F10 is rebindable under **Preferences → Hotkeys**.
 
 > Non-bootable preservation rips and **UDF** images can't be read by the DOS emulator — EmuDOS warns you on import if a disc isn't a standard ISO9660 CD.
 
 ### Windows games (advanced)
 
-EmuDOS runs **DOS**, but the DOSBox Pure core can also install and boot a real **Windows 9x**. With a *bootable* Windows install CD image, launch it and choose **[ Boot and Install New Operating System ]** from the start menu, pick a hard-disk size, and install Windows; the install persists. You can then add Windows game CDs to that box (right-click → **Add disc…**) and run them inside Windows. This is involved and needs a genuinely bootable install image — see the project notes if you go down this road.
+EmuDOS runs **DOS**, but the DOSBox Pure core can also install and boot a real **Windows 9x**. With a *bootable* Windows install CD image, launch it and choose **[ Boot and Install New Operating System ]** from the start menu, pick a hard-disk size, and install Windows; the install persists. You can then add Windows game CDs to that box (right-click → **Add disc…**) and run them inside Windows; mount every disc a game needs before launching, then press **F10** in Windows to swap between them. This is involved and needs a genuinely bootable install image — see the project notes if you go down this road.
 
 ---
 
@@ -69,7 +71,13 @@ Click a box and the game opens in its own window. Keyboard and mouse go straight
 
 ### Save states
 
-Use the save-state controls to snapshot and restore your exact place in a game. States are stored in the gamebox's `saves` folder.
+Snapshot your exact place in a game and jump back to it later:
+
+- **F5** writes a quick save; **F8** loads it back. A small on-screen note confirms each.
+- One quick-save slot per game, stored in the gamebox's `saves` folder.
+- Both keys are rebindable in **Preferences → Hotkeys**.
+
+Save states capture the whole machine, so they're best for plain DOS games; a booted OS is less reliable. A saved state expects the same game and settings it was made with.
 
 ---
 
@@ -93,7 +101,7 @@ Under **Preferences → Media** you can set the save folders, the screenshot siz
 
 ## Hotkeys
 
-**Preferences → Hotkeys** rebinds the screenshot, record, and mouse-lock keys — click a box and press the key you want (Esc resets it to the default). Middle-click always toggles mouse lock regardless.
+**Preferences → Hotkeys** rebinds the screenshot, record, mouse-lock, disc-swap menu (**F10**), and quick save/load state (**F5**/**F8**) keys — click a box and press the key you want (Esc resets it to the default). Middle-click always toggles mouse lock regardless.
 
 ---
 

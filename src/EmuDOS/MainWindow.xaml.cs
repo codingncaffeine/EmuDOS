@@ -37,12 +37,19 @@ public partial class MainWindow : Window
     {
         var services = ((App)Application.Current).Services;
         new PreferencesWindow(services) { Owner = this }.ShowDialog();
+        Vm?.ReapplyBoxStyle(); // pick up a changed "Use 3D boxes by default"
     }
 
     private async void OnDownloadMissingArt(object sender, RoutedEventArgs e)
     {
         if (Vm is not null)
             await Vm.FetchMissingArtAsync();
+    }
+
+    private async void OnDownload3DArtAll(object sender, RoutedEventArgs e)
+    {
+        if (Vm is not null)
+            await Vm.FetchAll3DArtAsync();
     }
 
     private void OnBoxRightClick(object sender, MouseButtonEventArgs e)
@@ -61,8 +68,26 @@ public partial class MainWindow : Window
         var boxArt = new MenuItem { Header = "Download box art" };
         boxArt.Click += async (_, _) => await (Vm?.DownloadArtAsync(tile) ?? Task.CompletedTask);
 
+        var box3D = new MenuItem { Header = "Download 3D box art" };
+        box3D.Click += async (_, _) => await (Vm?.Download3DArtAsync(tile) ?? Task.CompletedTask);
+
         var customArt = new MenuItem { Header = "Set box art from file…" };
         customArt.Click += (_, _) => SetCustomArt(tile);
+
+        // Per-game 2D/3D choice (overrides the global default; for when one style's art is poor).
+        var boxStyle = new MenuItem { Header = "Box style" };
+        foreach (var (label, style) in new[]
+                 {
+                     ("Default (follow global)", BoxStyle.Default),
+                     ("2D box", BoxStyle.TwoD),
+                     ("3D box", BoxStyle.ThreeD),
+                 })
+        {
+            var captured = style;
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = tile.StyleOverride == style };
+            item.Click += (_, _) => Vm?.SetGameBoxStyle(tile, captured);
+            boxStyle.Items.Add(item);
+        }
 
         var manual = new MenuItem { Header = "Download manual" };
         manual.Click += async (_, _) => await DownloadManualAsync(tile);
@@ -70,7 +95,9 @@ public partial class MainWindow : Window
         menu.Items.Add(preferences);
         menu.Items.Add(openInDos);
         menu.Items.Add(boxArt);
+        menu.Items.Add(box3D);
         menu.Items.Add(customArt);
+        menu.Items.Add(boxStyle);
         menu.Items.Add(manual);
 
         // For disc-based games (e.g. an installed Windows machine), let the user add more discs —
@@ -387,6 +414,7 @@ public partial class MainWindow : Window
     {
         var services = ((App)Application.Current).Services;
         new PreferencesWindow(services, tile) { Owner = this }.ShowDialog();
+        Vm?.ReapplyBoxStyle(); // pick up a changed "Use 3D boxes by default"
     }
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)

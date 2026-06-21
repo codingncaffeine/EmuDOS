@@ -71,12 +71,13 @@ public sealed class AppServices
     /// <summary>Rebuild the art service after the ScreenScraper login changes.</summary>
     public void ReloadArtService() => Art = BuildArtService();
 
-    /// <summary>Verify a ScreenScraper login; logs the result.</summary>
-    public async Task<bool> ValidateScreenScraperAsync(string user, string password)
+    /// <summary>Verify a ScreenScraper login; logs the result. Returns success and the account's
+    /// concurrent-request (maxthreads) allowance.</summary>
+    public async Task<(bool Ok, int MaxThreads)> ValidateScreenScraperAsync(string user, string password)
     {
-        var ok = await new ScreenScraperClient(_screenScraperHttp, user, password).ValidateLoginAsync();
-        SnapsLog.Info($"ScreenScraper login test for '{user}': {(ok ? "SUCCESS" : "FAILED")}");
-        return ok;
+        var result = await new ScreenScraperClient(_screenScraperHttp, user, password).ValidateLoginAsync();
+        SnapsLog.Info($"ScreenScraper login test for '{user}': {(result.Ok ? "SUCCESS" : "FAILED")} (maxthreads={result.MaxThreads})");
+        return result;
     }
 
     /// <summary>Verify a SteamGridDB API key; logs the result.</summary>

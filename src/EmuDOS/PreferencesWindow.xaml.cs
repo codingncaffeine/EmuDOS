@@ -37,6 +37,7 @@ public partial class PreferencesWindow : Window
         SsUser.Text = services.Settings.ScreenScraperUser;
         SsPass.Password = services.Settings.ScreenScraperPassword;
         SgdbKey.Text = services.Settings.SteamGridDbKey;
+        Use3DBox.IsChecked = services.Settings.Use3DBoxes;
 
         ScreenshotFolderBox.Text = string.IsNullOrWhiteSpace(services.Settings.ScreenshotFolder)
             ? services.Paths.ScreenshotsDir : services.Settings.ScreenshotFolder;
@@ -49,6 +50,8 @@ public partial class PreferencesWindow : Window
         HotkeyRecord.Text = Display(services.Settings.RecordKey, "F9");
         HotkeyMouseLock.Text = Display(services.Settings.MouseLockKey, "Middle Mouse");
         HotkeyMenu.Text = Display(services.Settings.MenuKey, "F10");
+        HotkeySaveState.Text = Display(services.Settings.SaveStateKey, "F5");
+        HotkeyLoadState.Text = Display(services.Settings.LoadStateKey, "F8");
 
         DownloadList.ItemsSource = AssetManifest.All
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
@@ -202,6 +205,8 @@ public partial class PreferencesWindow : Window
             box.Text = box == HotkeyMouseLock ? "Middle Mouse"
                 : box == HotkeyRecord ? "F9"
                 : box == HotkeyMenu ? "F10"
+                : box == HotkeySaveState ? "F5"
+                : box == HotkeyLoadState ? "F8"
                 : "F12";
             return;
         }
@@ -214,6 +219,8 @@ public partial class PreferencesWindow : Window
         _services.Settings.RecordKey = HotkeyRecord.Text.Trim();
         _services.Settings.MouseLockKey = HotkeyMouseLock.Text == "Middle Mouse" ? string.Empty : HotkeyMouseLock.Text.Trim();
         _services.Settings.MenuKey = HotkeyMenu.Text.Trim();
+        _services.Settings.SaveStateKey = HotkeySaveState.Text.Trim();
+        _services.Settings.LoadStateKey = HotkeyLoadState.Text.Trim();
         _services.SettingsStore.Save(_services.Settings);
         Set(HotkeysStatus, "Saved — applies next launch.", Success);
     }
@@ -240,6 +247,13 @@ public partial class PreferencesWindow : Window
         Set(MediaStatus, "Saved.", Success);
     }
 
+    private void OnToggle3DBoxes(object sender, RoutedEventArgs e)
+    {
+        _services.Settings.Use3DBoxes = Use3DBox.IsChecked == true;
+        _services.SettingsStore.Save(_services.Settings);
+        // The shelf re-applies this when the dialog closes (MainWindow re-reads the setting).
+    }
+
     private async void OnLoginScreenScraper(object sender, RoutedEventArgs e)
     {
         SsLogin.IsEnabled = false;
@@ -249,15 +263,20 @@ public partial class PreferencesWindow : Window
         _services.Settings.ScreenScraperPassword = SsPass.Password;
         _services.SettingsStore.Save(_services.Settings);
 
-        bool ok = await _services.ValidateScreenScraperAsync(
+        var (ok, maxThreads) = await _services.ValidateScreenScraperAsync(
             _services.Settings.ScreenScraperUser, _services.Settings.ScreenScraperPassword);
         if (ok)
         {
+            // Remember the account's allowed concurrency so bulk art downloads can parallelise.
+            _services.Settings.ScreenScraperMaxThreads = maxThreads;
+            _services.SettingsStore.Save(_services.Settings);
             _services.ReloadArtService();
             TriggerArtRefetch();
         }
 
-        Set(SsStatus, ok ? $"✓ Logged in as {_services.Settings.ScreenScraperUser}" : "✗ Login failed",
+        Set(SsStatus,
+            ok ? $"✓ Logged in as {_services.Settings.ScreenScraperUser} ({maxThreads} thread{(maxThreads == 1 ? "" : "s")})"
+               : "✗ Login failed",
             ok ? Success : Failure);
         SsLogin.IsEnabled = true;
     }

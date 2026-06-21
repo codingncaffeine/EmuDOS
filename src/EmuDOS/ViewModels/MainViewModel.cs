@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using EmuDOS.Core.Model;
 using EmuDOS.Services;
 
 namespace EmuDOS.ViewModels;
@@ -42,8 +44,12 @@ public sealed partial class MainViewModel : ObservableObject
     public void LoadLibrary()
     {
         Games.Clear();
+        var use3D = _services.Settings.Use3DBoxes;
         foreach (var game in _services.Library.GetGames())
-            Games.Add(new GameTile(game));
+        {
+            var style = _services.Store.ReadState(game.GameboxPath).BoxStyle;
+            Games.Add(new GameTile(game, style, use3D));
+        }
     }
 
     /// <summary>Show a transient status (import/download/problem).</summary>
@@ -307,38 +313,146 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        foreach (var tile in pending)
+        var total = pending.Count;
+        var done = 0;
+        await RunArtBatchAsync(pending, async tile =>
         {
-            if (File.Exists(tile.BoxFrontPath))
+            // On disk already, or restorable from the cache (e.g. a re-imported game) — no network.
+            if (File.Exists(tile.BoxFrontPath) || _services.ArtCache.TryRestore(tile.Title, tile.MediaDir))
             {
-                tile.LoadCover();
-                continue;
+                OnUI(tile.LoadCover);
+                return;
             }
 
-            // Restore from the art cache first (e.g. re-import of a previously-deleted game) —
-            // avoids a needless re-download.
-            if (_services.ArtCache.TryRestore(tile.Title, tile.MediaDir))
+            var path = await _services.Art.FetchBoxFrontAsync(tile.Title, tile.MediaDir);
+            if (path is not null)
             {
-                tile.LoadCover();
-                continue;
+                _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath);
+                OnUI(tile.LoadCover);
             }
-
-            Report($"Fetching art for {tile.Title}…", busy: true);
-            try
-            {
-                var path = await _services.Art.FetchBoxFrontAsync(tile.Title, tile.MediaDir);
-                if (path is not null)
-                {
-                    tile.LoadCover();
-                    _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath);
-                }
-            }
-            catch
-            {
-                // Network/art hiccup — skip this one, keep going.
-            }
-        }
+        }, () =>
+        {
+            var n = Interlocked.Increment(ref done);
+            if (n % 5 == 0 || n == total)
+                OnUI(() => Report($"Fetching box art… ({n} of {total})", busy: true));
+        });
 
         ClearStatus();
+    }
+
+    /// <summary>Run an art-fetch action over many games concurrently, capped to the ScreenScraper
+    /// account's allowed thread count (1 for free/anonymous — so it stays sequential there).</summary>
+    private async Task RunArtBatchAsync(
+        IReadOnlyList<GameTile> tiles, Func<GameTile, Task> fetch, Action onEach)
+    {
+        var threads = Math.Max(1, _services.Settings.ScreenScraperMaxThreads);
+        using var sem = new SemaphoreSlim(threads, threads);
+        var tasks = tiles.Select(async tile =>
+        {
+            await sem.WaitAsync();
+            try { await fetch(tile); }
+            catch { /* network/art hiccup — skip this one, keep going */ }
+            finally { onEach(); sem.Release(); }
+        });
+        await Task.WhenAll(tasks);
+    }
+
+    // Marshal a UI-touching action (Cover/status changes) onto the dispatcher when called from a
+    // background fetch task; runs inline when already on the UI thread.
+    private static void OnUI(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+            action();
+        else
+            dispatcher.Invoke(action);
+    }
+
+    /// <summary>Download the 3D box render for a single game and switch that game to showing it.</summary>
+    public async Task Download3DArtAsync(GameTile tile)
+    {
+        Report($"Fetching 3D box for {tile.Title}…", busy: true);
+        try
+        {
+            var path = await _services.Art.FetchBox3DAsync(tile.Title, tile.MediaDir);
+            if (path is not null)
+            {
+                // Downloading 3D = the user wants 3D for this game: persist the override and show it.
+                SetGameBoxStyle(tile, BoxStyle.ThreeD);
+                Report($"3D box downloaded for {tile.Title}.", busy: false);
+            }
+            else
+            {
+                Report($"No 3D box found for {tile.Title}.", busy: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Report($"3D box fetch failed: {ex.Message}", busy: false);
+        }
+    }
+
+    /// <summary>Download 3D box renders for every game that doesn't have one yet, switching the shelf
+    /// to 3D so each box appears as it arrives (games without a 3D box fall back to their 2D cover).</summary>
+    public async Task FetchAll3DArtAsync()
+    {
+        var pending = Games.Where(t => !t.Has3D).ToList();
+        if (pending.Count == 0)
+        {
+            // Nothing to fetch, but still honour the intent: show 3D where we have it.
+            SetGlobalBoxStyle(use3D: true);
+            return;
+        }
+
+        // Flip to 3D up front so each downloaded box switches over live during the run.
+        SetGlobalBoxStyle(use3D: true);
+
+        var total = pending.Count;
+        var got = 0;
+        var done = 0;
+        await RunArtBatchAsync(pending, async tile =>
+        {
+            var path = await _services.Art.FetchBox3DAsync(tile.Title, tile.MediaDir);
+            if (path is not null)
+            {
+                Interlocked.Increment(ref got);
+                OnUI(tile.LoadCover);
+            }
+        }, () =>
+        {
+            var n = Interlocked.Increment(ref done);
+            if (n % 5 == 0 || n == total)
+                OnUI(() => Report($"Fetching 3D boxes… ({n} of {total})", busy: true));
+        });
+
+        Report($"Downloaded {got} 3D box{(got == 1 ? "" : "es")}; showing 3D boxes.", busy: false);
+    }
+
+    /// <summary>Re-apply the current global box style to every tile (e.g. after Preferences changed it).
+    /// Reads the saved setting; does not write or report.</summary>
+    public void ReapplyBoxStyle()
+    {
+        var use3D = _services.Settings.Use3DBoxes;
+        foreach (var tile in Games)
+            tile.ApplyStyle(tile.StyleOverride, use3D);
+    }
+
+    /// <summary>Set the global default box style and re-apply it to every game on the shelf.</summary>
+    public void SetGlobalBoxStyle(bool use3D)
+    {
+        _services.Settings.Use3DBoxes = use3D;
+        _services.SettingsStore.Save(_services.Settings);
+        foreach (var tile in Games)
+            tile.ApplyStyle(tile.StyleOverride, use3D);
+        Report($"Showing {(use3D ? "3D" : "2D")} boxes.", busy: false);
+    }
+
+    /// <summary>Override (or clear) the box style for a single game, persisted to its state.json.</summary>
+    public void SetGameBoxStyle(GameTile tile, BoxStyle style)
+    {
+        var path = tile.Game.GameboxPath;
+        var state = _services.Store.ReadState(path) with { BoxStyle = style };
+        _services.Store.WriteState(path, state);
+        tile.ApplyStyle(style, _services.Settings.Use3DBoxes);
     }
 }

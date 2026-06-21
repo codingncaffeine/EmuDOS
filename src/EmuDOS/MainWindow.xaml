@@ -20,8 +20,11 @@
 
     <Grid>
         <Grid.ContextMenu>
+            <!-- Library-wide actions (right-click empty shelf space). The 2D/3D default lives in
+                 Preferences → Snaps; per-game 2D/3D is on each game's own right-click menu. -->
             <ContextMenu>
                 <MenuItem Header="Download missing art" Click="OnDownloadMissingArt"/>
+                <MenuItem Header="Download 3D box art (all games)" Click="OnDownload3DArtAll"/>
                 <MenuItem Header="Preferences…" Click="OnPreferences"/>
             </ContextMenu>
         </Grid.ContextMenu>
@@ -63,8 +66,21 @@
                                 <Grid.Effect>
                                     <DropShadowEffect BlurRadius="7" ShadowDepth="3" Opacity="0.55"/>
                                 </Grid.Effect>
+                                <!-- Brown placeholder shows ONLY when there's no cover. With art it
+                                     collapses, so a 3D box's transparent corners reveal the shelf wood
+                                     behind instead of a brown rectangle. -->
                                 <Border Background="#D9B98A" CornerRadius="2"
                                         BorderBrush="#3A2A1C" BorderThickness="1">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Cover}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
                                                TextAlignment="Center" Foreground="#2A1B10"
                                                FontSize="11" FontWeight="SemiBold" Margin="4"

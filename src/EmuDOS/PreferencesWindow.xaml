@@ -84,6 +84,13 @@
         <TabItem Header="Snaps">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="22,18">
+                    <TextBlock Text="Box style" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                               Text="Show 3D box renders instead of flat 2D covers (where a 3D box has been downloaded). Right-click a game to override this for it alone."/>
+                    <CheckBox x:Name="Use3DBox" Content="Use 3D boxes by default" Click="OnToggle3DBoxes"/>
+
+                    <Separator Margin="0,22" Background="{StaticResource BorderNormal}"/>
+
                     <TextBlock Text="ScreenScraper" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
                     <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
                                Text="Log in with your screenscraper.fr account for higher box-art download limits. (Optional — basic art works without it.)"/>
@@ -189,6 +196,16 @@
                              Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
                     <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0"
                                Text="Opens dosbox's menu — insert/eject discs, on-screen keyboard."/>
+
+                    <TextBlock Text="Quick save state" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeySaveState" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+
+                    <TextBlock Text="Quick load state" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeyLoadState" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0"
+                               Text="Snapshots/restores the running game (one quick slot per game)."/>
 
                     <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                         <Button Content="Save" Click="OnSaveHotkeys" Padding="18,6"/>

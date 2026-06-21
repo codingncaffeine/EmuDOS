@@ -25,6 +25,10 @@ public sealed record GameUserState
     /// so it should win over auto-detection. When false, auto-detecting the game is preferred.</summary>
     public bool ExecutableIsUserChoice { get; init; }
 
+    /// <summary>Per-game box-art style override. <see cref="BoxStyle.Default"/> follows the global
+    /// <c>UserSettings.Use3DBoxes</c> preference; the others force 2D or 3D for this game alone.</summary>
+    public BoxStyle BoxStyle { get; init; } = BoxStyle.Default;
+
     /// <summary>Return a copy with <paramref name="executable"/> recorded as the user's chosen program.</summary>
     public GameUserState WithExecutable(string? executable)
     {
