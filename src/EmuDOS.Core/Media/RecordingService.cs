@@ -143,9 +143,10 @@ public sealed class RecordingService(string ffmpegPath)
             var args = $"-y -f rawvideo -pix_fmt bgr0 -s {_width}x{_height} -r {fps} -i \"{_videoRaw}\" ";
             if (hasAudio)
                 args += $"-f s16le -ar {_sampleRate} -ac 2 -i \"{_audioRaw}\" ";
-            // Scale to the displayed (aspect-corrected) size so the video matches what was on screen;
-            // yuv420p for universal playback (needs even dimensions, which _outW/_outH already are).
-            args += $"-c:v libx264 -preset {preset} -crf {crf} -pix_fmt yuv420p -vf \"scale={_outW}:{_outH}:flags=lanczos\" ";
+            // Scale to the displayed (aspect-corrected) size with NEAREST-NEIGHBOR so pixels stay sharp
+            // (no smoothing) — matching the crisp on-screen image. yuv420p for universal playback
+            // (needs even dimensions, which _outW/_outH already are).
+            args += $"-c:v libx264 -preset {preset} -crf {crf} -pix_fmt yuv420p -vf \"scale={_outW}:{_outH}:flags=neighbor\" ";
             if (hasAudio)
                 args += "-c:a aac -b:a 192k ";
             args += $"-movflags +faststart \"{_outputPath}\"";
