@@ -33,6 +33,7 @@ public sealed class GitHubSyncService
 {
     private const string Api = "https://api.github.com";
     private static readonly HttpClient Http = CreateClient();
+    private static readonly SemaphoreSlim Gate = new(1, 1); // only one sync at a time (launch + manual)
 
     private readonly Action<string> _log;
 
@@ -130,6 +131,8 @@ public sealed class GitHubSyncService
         string gameboxesDir, string dbPath, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         int up = 0, down = 0;
+        if (!await Gate.WaitAsync(TimeSpan.FromMinutes(5), ct).ConfigureAwait(false))
+            return new CloudSyncResult(0, 0, "Another sync is already running.");
         try
         {
             _log($"Sync started → {login}/{repo}.");
@@ -225,6 +228,10 @@ public sealed class GitHubSyncService
         {
             _log($"Sync ERROR: {ex.Message}");
             return new CloudSyncResult(up, down, ex.Message);
+        }
+        finally
+        {
+            Gate.Release();
         }
     }
 
