@@ -125,6 +125,7 @@ public partial class GameDetailWindow : Window
     {
         _isFavorite = !_isFavorite;
         _services.Library.SetFavorite(_tile.Id, _isFavorite);
+        _tile.IsFavorite = _isFavorite; // live-updates the shelf heart badge
         UpdateFavButton();
     }
 

@@ -19,9 +19,14 @@ public sealed partial class GameTile : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
+    /// <summary>Whether the game is favorited (drives the shelf heart badge); toggled from the card.</summary>
+    [ObservableProperty]
+    private bool _isFavorite;
+
     public GameTile(LibraryGame game, BoxStyle styleOverride = BoxStyle.Default, bool globalUse3D = false)
     {
         _game = game;
+        _isFavorite = game.IsFavorite;
         StyleOverride = styleOverride;
         _prefer3D = ResolvePrefer3D(styleOverride, globalUse3D);
         LoadCover();
