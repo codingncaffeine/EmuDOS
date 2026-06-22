@@ -55,6 +55,22 @@ public static class AssetManifest
         Category = AssetCategory.Native,
     };
 
+    public const string Sdl3FileName = "SDL3.dll";
+
+    /// <summary>SDL3 — used only to identify controllers by friendly name (Xbox, DualSense, 8BitDo…).
+    /// Optional: controllers work via XInput without it; this just adds recognition. The win32-x64
+    /// release zip carries SDL3.dll at its root; ZippedCore extracts it by name into Cores.</summary>
+    public static DownloadAsset Sdl3 { get; } = new()
+    {
+        Id = "sdl3",
+        DisplayName = "Controller names (SDL3)",
+        Description = "Identifies game controllers by name. Optional — controllers work without it; this just shows which pad is connected.",
+        Url = "https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10-win32-x64.zip",
+        Kind = DownloadKind.ZippedCore,
+        FileName = Sdl3FileName,
+        Category = AssetCategory.Native,
+    };
+
     /// <summary>All assets the Downloads tab can offer.</summary>
-    public static IReadOnlyList<DownloadAsset> All { get; } = [DosBoxPure, Catalog, Ffmpeg];
+    public static IReadOnlyList<DownloadAsset> All { get; } = [DosBoxPure, Catalog, Ffmpeg, Sdl3];
 }

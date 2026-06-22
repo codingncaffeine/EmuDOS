@@ -39,6 +39,7 @@ public sealed class XInputController
 
     private readonly GetStateFn? _getState;
     private readonly uint[] _snapshot = new uint[4]; // per-port PadButton bitmask, latched on Poll
+    private readonly bool[] _connected = new bool[4];
 
     public XInputController()
     {
@@ -62,11 +63,18 @@ public sealed class XInputController
         if (_getState is null)
             return;
         for (uint port = 0; port < 4; port++)
-            _snapshot[port] = _getState(port, out var state) == 0 ? Map(state.Pad) : 0; // 0 = ERROR_SUCCESS
+        {
+            bool ok = _getState(port, out var state) == 0; // 0 = ERROR_SUCCESS
+            _connected[port] = ok;
+            _snapshot[port] = ok ? Map(state.Pad) : 0;
+        }
     }
 
     public bool IsButtonDown(int port, PadButton button) =>
         port is >= 0 and < 4 && (_snapshot[port] & (1u << (int)button)) != 0;
+
+    /// <summary>Whether a controller is connected on this port (refreshed by <see cref="Poll"/>).</summary>
+    public bool IsConnected(int port) => port is >= 0 and < 4 && _connected[port];
 
     private static uint Map(Gamepad g)
     {

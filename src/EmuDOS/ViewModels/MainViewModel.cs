@@ -42,6 +42,18 @@ public sealed partial class MainViewModel : ObservableObject
         MigrateFlatMedia();
         LoadLibrary();
         StartAutoCloudSync();
+        StartControllerMonitor();
+    }
+
+    private EmuDOS.Core.Input.ControllerMonitor? _controllers;
+
+    // Announce controller connect/disconnect (with the SDL3 friendly name) in the bottom status bar.
+    private void StartControllerMonitor()
+    {
+        _controllers = new EmuDOS.Core.Input.ControllerMonitor(_services.Paths.CoresDir);
+        _controllers.Connected += name => Ui(() => Report($"{name} connected", busy: false));
+        _controllers.Disconnected += name => Ui(() => Report($"{name} disconnected", busy: false));
+        _controllers.Start();
     }
 
     // If connected to GitHub, sync saves in the background at launch — never on the UI thread.
