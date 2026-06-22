@@ -1,0 +1,287 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace EmuDOS.Metadata;
+
+/// <summary>Device-flow login details to show the user.</summary>
+public sealed record GitHubDeviceCode(string UserCode, string VerificationUri, string DeviceCode, int Interval, int ExpiresIn);
+
+/// <summary>Outcome of a sync run.</summary>
+public sealed record CloudSyncResult(int Uploaded, int Downloaded, string? Error)
+{
+    public bool Ok => Error is null;
+}
+
+/// <summary>
+/// Syncs save data to a user's private GitHub repo via the OAuth device flow (no client secret).
+/// Operates purely on paths so it carries no dependency on the rest of EmuDOS: per game it syncs the
+/// save-state files (<c>state_*.sav.gz</c>/<c>.png</c>/<c>.json</c>, additive — they never overwrite),
+/// <c>notes.md</c>, and pushes a gzip'd copy of the library database. Files are small, so it uses the
+/// REST Contents API (with the Git blob API for downloads, which handles larger files).
+/// </summary>
+public sealed class GitHubSyncService
+{
+    private const string Api = "https://api.github.com";
+    private static readonly HttpClient Http = CreateClient();
+
+    private static HttpClient CreateClient()
+    {
+        var c = new HttpClient();
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("EmuDOS");
+        c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        return c;
+    }
+
+    // ── Device-flow login ─────────────────────────────────────────────────────────────────
+    public async Task<GitHubDeviceCode?> RequestDeviceCodeAsync(CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, "https://github.com/login/device/code")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = Secrets.GitHubOAuthClientId,
+                ["scope"] = "repo",
+            }),
+        };
+        req.Headers.Accept.Clear();
+        req.Headers.Accept.ParseAdd("application/json");
+        using var resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            return null;
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        var r = doc.RootElement;
+        return new GitHubDeviceCode(
+            r.GetProperty("user_code").GetString() ?? "",
+            r.GetProperty("verification_uri").GetString() ?? "https://github.com/login/device",
+            r.GetProperty("device_code").GetString() ?? "",
+            r.TryGetProperty("interval", out var iv) ? iv.GetInt32() : 5,
+            r.TryGetProperty("expires_in", out var ex) ? ex.GetInt32() : 900);
+    }
+
+    /// <summary>Poll until the user authorizes (returns the token) or it times out/denies (null).</summary>
+    public async Task<string?> PollAccessTokenAsync(GitHubDeviceCode code, CancellationToken ct = default)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(code.ExpiresIn);
+        var interval = Math.Max(1, code.Interval);
+        while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(interval), ct).ConfigureAwait(false);
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://github.com/login/oauth/access_token")
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["client_id"] = Secrets.GitHubOAuthClientId,
+                    ["device_code"] = code.DeviceCode,
+                    ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+                }),
+            };
+            req.Headers.Accept.Clear();
+            req.Headers.Accept.ParseAdd("application/json");
+            using var resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            var r = doc.RootElement;
+            if (r.TryGetProperty("access_token", out var tok))
+                return tok.GetString();
+            var err = r.TryGetProperty("error", out var e) ? e.GetString() : null;
+            if (err == "slow_down")
+                interval += 5;
+            else if (err is not null and not "authorization_pending")
+                return null; // expired_token / access_denied
+        }
+        return null;
+    }
+
+    public async Task<string?> GetLoginAsync(string token, CancellationToken ct = default)
+    {
+        using var resp = await SendAsync(HttpMethod.Get, $"{Api}/user", token, ct: ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            return null;
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        return doc.RootElement.GetProperty("login").GetString();
+    }
+
+    // ── Sync ────────────────────────────────────────────────────────────────────────────
+    public async Task<CloudSyncResult> SyncAsync(string token, string login, string repo,
+        string gameboxesDir, string dbPath, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        int up = 0, down = 0;
+        try
+        {
+            progress?.Report("Connecting…");
+            if (!await EnsureRepoAsync(token, login, repo, ct).ConfigureAwait(false))
+                return new CloudSyncResult(0, 0, "Couldn't access or create the sync repo.");
+
+            // Push the library database (gzip'd snapshot).
+            if (File.Exists(dbPath))
+            {
+                progress?.Report("Uploading library database…");
+                if (await PutAsync(token, login, repo, "db/library.db.gz", Gzip(File.ReadAllBytes(dbPath)), ct).ConfigureAwait(false))
+                    up++;
+            }
+
+            // Per-game push: state files (additive) + notes.
+            foreach (var gameDir in SafeDirs(gameboxesDir))
+            {
+                ct.ThrowIfCancellationRequested();
+                var name = Path.GetFileName(gameDir);
+                var savesDir = Path.Combine(gameDir, "saves");
+                var stateFiles = Directory.Exists(savesDir)
+                    ? Directory.EnumerateFiles(savesDir, "state_*").ToList()
+                    : new List<string>();
+                var notes = Path.Combine(gameDir, "notes.md");
+                if (stateFiles.Count == 0 && !File.Exists(notes))
+                    continue;
+
+                progress?.Report($"Syncing {name}…");
+                var remote = await ListNamesAsync(token, login, repo, $"saves/{name}", ct).ConfigureAwait(false);
+                foreach (var f in stateFiles)
+                {
+                    if (remote.Contains(Path.GetFileName(f))) // additive: never overwrite an existing state
+                        continue;
+                    if (await PutAsync(token, login, repo, $"saves/{name}/{Path.GetFileName(f)}", File.ReadAllBytes(f), ct).ConfigureAwait(false))
+                        up++;
+                }
+                if (File.Exists(notes) &&
+                    await PutAsync(token, login, repo, $"notes/{name}.md", File.ReadAllBytes(notes), ct).ConfigureAwait(false))
+                    up++;
+            }
+
+            // Per-game pull: state files and notes that exist in the repo but not locally (additive,
+            // only into games that exist locally).
+            progress?.Report("Checking for saves to download…");
+            foreach (var folder in await ListNamesAsync(token, login, repo, "saves", ct).ConfigureAwait(false))
+            {
+                var localSaves = Path.Combine(gameboxesDir, folder, "saves");
+                if (!Directory.Exists(Path.Combine(gameboxesDir, folder)))
+                    continue; // can't restore saves for a game that isn't installed here
+                foreach (var (fname, sha) in await ListEntriesAsync(token, login, repo, $"saves/{folder}", ct).ConfigureAwait(false))
+                {
+                    var local = Path.Combine(localSaves, fname);
+                    if (File.Exists(local))
+                        continue;
+                    var bytes = await GetBlobAsync(token, login, repo, sha, ct).ConfigureAwait(false);
+                    if (bytes is null)
+                        continue;
+                    Directory.CreateDirectory(localSaves);
+                    File.WriteAllBytes(local, bytes);
+                    down++;
+                }
+            }
+
+            progress?.Report($"Done — {up} uploaded, {down} downloaded.");
+            return new CloudSyncResult(up, down, null);
+        }
+        catch (OperationCanceledException)
+        {
+            return new CloudSyncResult(up, down, "Cancelled.");
+        }
+        catch (Exception ex)
+        {
+            return new CloudSyncResult(up, down, ex.Message);
+        }
+    }
+
+    // ── GitHub REST helpers ───────────────────────────────────────────────────────────────
+    private static async Task<bool> EnsureRepoAsync(string token, string login, string repo, CancellationToken ct)
+    {
+        using (var get = await SendAsync(HttpMethod.Get, $"{Api}/repos/{login}/{repo}", token, ct: ct).ConfigureAwait(false))
+            if (get.IsSuccessStatusCode)
+                return true;
+
+        var body = JsonSerializer.Serialize(new { name = repo, @private = true, auto_init = true });
+        using var create = await SendAsync(HttpMethod.Post, $"{Api}/user/repos", token, body, ct).ConfigureAwait(false);
+        return create.IsSuccessStatusCode;
+    }
+
+    private static async Task<bool> PutAsync(string token, string login, string repo, string path, byte[] content, CancellationToken ct)
+    {
+        var sha = await GetShaAsync(token, login, repo, path, ct).ConfigureAwait(false);
+        var payload = new Dictionary<string, object>
+        {
+            ["message"] = $"EmuDOS sync: {path}",
+            ["content"] = Convert.ToBase64String(content),
+        };
+        if (sha is not null)
+            payload["sha"] = sha;
+        using var resp = await SendAsync(HttpMethod.Put, $"{Api}/repos/{login}/{repo}/contents/{EscapePath(path)}",
+            token, JsonSerializer.Serialize(payload), ct).ConfigureAwait(false);
+        return resp.IsSuccessStatusCode;
+    }
+
+    private static async Task<string?> GetShaAsync(string token, string login, string repo, string path, CancellationToken ct)
+    {
+        var dir = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        foreach (var (fname, sha) in await ListEntriesAsync(token, login, repo, dir, ct).ConfigureAwait(false))
+            if (fname == name)
+                return sha;
+        return null;
+    }
+
+    private static async Task<HashSet<string>> ListNamesAsync(string token, string login, string repo, string dir, CancellationToken ct)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (fname, _) in await ListEntriesAsync(token, login, repo, dir, ct).ConfigureAwait(false))
+            set.Add(fname);
+        return set;
+    }
+
+    private static async Task<List<(string Name, string Sha)>> ListEntriesAsync(string token, string login, string repo, string dir, CancellationToken ct)
+    {
+        var list = new List<(string, string)>();
+        using var resp = await SendAsync(HttpMethod.Get, $"{Api}/repos/{login}/{repo}/contents/{EscapePath(dir)}", token, ct: ct).ConfigureAwait(false);
+        if (resp.StatusCode == HttpStatusCode.NotFound || !resp.IsSuccessStatusCode)
+            return list;
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in doc.RootElement.EnumerateArray())
+            if (item.GetProperty("type").GetString() == "file")
+                list.Add((item.GetProperty("name").GetString() ?? "", item.GetProperty("sha").GetString() ?? ""));
+        return list;
+    }
+
+    private static async Task<byte[]?> GetBlobAsync(string token, string login, string repo, string sha, CancellationToken ct)
+    {
+        using var resp = await SendAsync(HttpMethod.Get, $"{Api}/repos/{login}/{repo}/git/blobs/{sha}", token, ct: ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            return null;
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        var content = doc.RootElement.GetProperty("content").GetString() ?? "";
+        try { return Convert.FromBase64String(content.Replace("\n", "")); }
+        catch { return null; }
+    }
+
+    private static async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string token, string? jsonBody = null, CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(method, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (jsonBody is not null)
+            req.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+        return await Http.SendAsync(req, ct).ConfigureAwait(false);
+    }
+
+    private static string EscapePath(string path) =>
+        string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+
+    private static byte[] Gzip(byte[] data)
+    {
+        using var ms = new MemoryStream();
+        using (var gz = new GZipStream(ms, CompressionLevel.Optimal, leaveOpen: true))
+            gz.Write(data, 0, data.Length);
+        return ms.ToArray();
+    }
+
+    private static IEnumerable<string> SafeDirs(string root) =>
+        Directory.Exists(root) ? Directory.EnumerateDirectories(root) : Enumerable.Empty<string>();
+}

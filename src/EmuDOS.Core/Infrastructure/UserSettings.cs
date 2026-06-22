@@ -54,4 +54,15 @@ public sealed class UserSettings
 
     /// <summary>Key that loads the quick save state for the running game.</summary>
     public string LoadStateKey { get; set; } = "F8";
+
+    // --- Cloud save sync (GitHub). ---
+
+    /// <summary>GitHub OAuth access token from the device-flow login (empty = not connected).</summary>
+    public string GitHubToken { get; set; } = string.Empty;
+
+    /// <summary>The connected GitHub account's login name (for display).</summary>
+    public string GitHubLogin { get; set; } = string.Empty;
+
+    /// <summary>The private repo that holds synced saves.</summary>
+    public string GitHubRepo { get; set; } = "emudos-saves";
 }

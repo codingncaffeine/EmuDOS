@@ -275,6 +275,19 @@
                     <Button Content="Back up all saves…" Padding="14,6" HorizontalAlignment="Left" Click="OnBackupAllSaves"/>
 
                     <TextBlock x:Name="BackupStatus" FontSize="11" Margin="0,16,0,0" TextWrapping="Wrap"/>
+
+                    <Separator Margin="0,18,0,16" Background="{StaticResource BorderNormal}"/>
+
+                    <TextBlock Text="Cloud sync (GitHub)" Style="{StaticResource Heading}" FontSize="13" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,8"
+                               Text="Sync save states and notes to your own private GitHub repo. Screenshots and videos stay local."/>
+                    <TextBlock x:Name="CloudStatus" FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondary}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="ConnectButton" Content="Connect to GitHub…" Padding="14,6" Click="OnConnectGitHub"/>
+                        <Button x:Name="SyncNowButton" Content="Sync now" Padding="14,6" Margin="8,0,0,0" IsEnabled="False" Click="OnSyncNow"/>
+                        <Button x:Name="DisconnectButton" Content="Disconnect" Padding="14,6" Margin="8,0,0,0" Visibility="Collapsed" Click="OnDisconnect"/>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </TabItem>

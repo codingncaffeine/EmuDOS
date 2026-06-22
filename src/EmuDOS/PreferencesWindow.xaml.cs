@@ -53,6 +53,8 @@ public partial class PreferencesWindow : Window
         HotkeySaveState.Text = Display(services.Settings.SaveStateKey, "F5");
         HotkeyLoadState.Text = Display(services.Settings.LoadStateKey, "F8");
 
+        UpdateCloudUi();
+
         DownloadList.ItemsSource = AssetManifest.All
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
             .ToList();
@@ -375,6 +377,88 @@ public partial class PreferencesWindow : Window
             Set(BackupStatus, $"Backed up saves for {games} game(s) to {dest}", Success);
         }
         catch (System.Exception ex) { Set(BackupStatus, $"Backup failed: {ex.Message}", Failure); }
+    }
+
+    // ── Cloud sync ─────────────────────────────────────────────────────────────────
+    private EmuDOS.Metadata.GitHubSyncService? _gh;
+    private EmuDOS.Metadata.GitHubSyncService Gh => _gh ??= new EmuDOS.Metadata.GitHubSyncService();
+
+    private void UpdateCloudUi()
+    {
+        var connected = !string.IsNullOrEmpty(_services.Settings.GitHubToken);
+        CloudStatus.Text = connected ? $"Connected as {_services.Settings.GitHubLogin}." : "Not connected.";
+        ConnectButton.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
+        SyncNowButton.IsEnabled = connected;
+        DisconnectButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnConnectGitHub(object sender, RoutedEventArgs e)
+    {
+        ConnectButton.IsEnabled = false;
+        try
+        {
+            var code = await Gh.RequestDeviceCodeAsync();
+            if (code is null)
+            {
+                CloudStatus.Text = "Couldn't start GitHub login. Check your connection.";
+                return;
+            }
+            try { Clipboard.SetText(code.UserCode); } catch { /* clipboard may be busy */ }
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(code.VerificationUri) { UseShellExecute = true }); }
+            catch { /* user can open it manually */ }
+            CloudStatus.Text = $"Enter code  {code.UserCode}  at {code.VerificationUri} (copied to clipboard). Waiting for authorization…";
+
+            var token = await Gh.PollAccessTokenAsync(code);
+            if (token is null)
+            {
+                CloudStatus.Text = "Login timed out or was denied. Try again.";
+                return;
+            }
+            _services.Settings.GitHubToken = token;
+            _services.Settings.GitHubLogin = await Gh.GetLoginAsync(token) ?? "";
+            _services.SettingsStore.Save(_services.Settings);
+            UpdateCloudUi();
+        }
+        catch (System.Exception ex)
+        {
+            CloudStatus.Text = $"Connect failed: {ex.Message}";
+        }
+        finally
+        {
+            ConnectButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnSyncNow(object sender, RoutedEventArgs e)
+    {
+        SyncNowButton.IsEnabled = false;
+        var progress = new System.Progress<string>(s => CloudStatus.Text = s);
+        try
+        {
+            var s = _services.Settings;
+            var result = await Gh.SyncAsync(s.GitHubToken, s.GitHubLogin, s.GitHubRepo,
+                _services.Paths.GameboxesDir, Path.Combine(_services.Paths.DataRoot, "library.db"), progress);
+            CloudStatus.Text = result.Ok
+                ? $"Synced — {result.Uploaded} uploaded, {result.Downloaded} downloaded."
+                : $"Sync failed: {result.Error}";
+        }
+        catch (System.Exception ex)
+        {
+            CloudStatus.Text = $"Sync failed: {ex.Message}";
+        }
+        finally
+        {
+            SyncNowButton.IsEnabled = true;
+        }
+    }
+
+    private void OnDisconnect(object sender, RoutedEventArgs e)
+    {
+        _services.Settings.GitHubToken = string.Empty;
+        _services.Settings.GitHubLogin = string.Empty;
+        _services.SettingsStore.Save(_services.Settings);
+        UpdateCloudUi();
+        CloudStatus.Text = "Disconnected.";
     }
 
     private static void Set(TextBlock target, string text, Brush brush)
