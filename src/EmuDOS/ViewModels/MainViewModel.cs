@@ -1,7 +1,9 @@
+using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using EmuDOS.Core.Model;
 using EmuDOS.Services;
@@ -39,7 +41,43 @@ public sealed partial class MainViewModel : ObservableObject
         _services = services;
         MigrateFlatMedia();
         LoadLibrary();
+        StartAutoCloudSync();
     }
+
+    // If connected to GitHub, sync saves in the background at launch — never on the UI thread.
+    private void StartAutoCloudSync()
+    {
+        var s = _services.Settings;
+        if (string.IsNullOrEmpty(s.GitHubToken))
+            return;
+
+        string token = s.GitHubToken, login = s.GitHubLogin, repo = s.GitHubRepo;
+        var gameboxesDir = _services.Paths.GameboxesDir;
+        var dbPath = Path.Combine(_services.Paths.DataRoot, "library.db");
+        var log = _services.CloudLog;
+        var gh = new EmuDOS.Metadata.GitHubSyncService(log.Info);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                log.Info("Auto-sync at launch starting…");
+                Ui(() => Report("Syncing saves…", busy: true));
+                var r = await gh.SyncAsync(token, login, repo, gameboxesDir, dbPath);
+                Ui(() => Report(r.Ok
+                    ? $"Saves synced — {r.Uploaded} uploaded, {r.Downloaded} downloaded."
+                    : $"Cloud sync failed: {r.Error}", busy: false));
+            }
+            catch (Exception ex)
+            {
+                log.Info($"Auto-sync error: {ex.Message}");
+                Ui(() => Report($"Cloud sync failed: {ex.Message}", busy: false));
+            }
+        });
+    }
+
+    private static void Ui(Action action) =>
+        System.Windows.Application.Current?.Dispatcher.Invoke(action);
 
     // One-time move of legacy flat screenshots/videos into each game's per-game media folders.
     private void MigrateFlatMedia()
