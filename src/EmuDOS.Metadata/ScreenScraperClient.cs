@@ -92,6 +92,15 @@ public sealed partial class ScreenScraperClient
         return md;
     }
 
+    /// <summary>Resolve a lookup term to ScreenScraper's canonical game name (ungated — used by the
+    /// manual "Rename from ScreenScraper" action where the user supplies the term). Null if no match.</summary>
+    public async Task<string?> ResolveNameAsync(string gameName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+        var jeu = await ResolveJeuAsync(gameName, cancellationToken);
+        return jeu is null ? null : Nz(PickRegional(jeu["noms"]?.AsArray(), "text", ["us", "wor", "world", "eu", "ss"]));
+    }
+
     private static EmuDOS.Core.Model.GameMetadata? ExtractMetadataFromJeu(JsonNode jeu)
     {
         var year = PickRegional(jeu["dates"]?.AsArray(), "text", ["us", "wor", "ss", "eu", "jp"]);

@@ -358,6 +358,48 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>Manual override: look the game up on ScreenScraper by a user-supplied term, rename it to
+    /// the matched canonical title (the gamebox profile is the source of truth), and refresh its
+    /// metadata + art under that name. For the handful the automatic match can't reach (e.g. titles SS's
+    /// search only returns with an apostrophe).</summary>
+    public async Task RenameFromScreenScraperAsync(GameTile tile, string lookupTerm)
+    {
+        Report($"Looking up “{lookupTerm}” on ScreenScraper…", busy: true);
+        try
+        {
+            var canonical = await _services.Art.ResolveNameAsync(lookupTerm);
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                Report($"No ScreenScraper match for “{lookupTerm}”.", busy: false);
+                return;
+            }
+
+            var root = tile.Game.GameboxPath;
+            _services.Store.WriteProfile(root, _services.Store.ReadProfile(root) with { Title = canonical });
+            tile.RefreshFrom(_services.Library.UpsertFromGamebox(root));
+
+            // Refresh details + art under the corrected name, overwriting any wrong auto-match.
+            var md = await _services.Art.FetchMetadataAsync(canonical);
+            if (md is not null && !md.IsEmpty)
+            {
+                _services.Store.WriteMetadata(root, md);
+                _services.ArtCache.StashMetadata(canonical, Path.Combine(root, "metadata.json"));
+            }
+            var art = await _services.Art.FetchBoxFrontAsync(canonical, tile.MediaDir);
+            if (art is not null)
+            {
+                _services.ArtCache.Stash(canonical, tile.BoxFrontPath);
+                tile.LoadCover();
+            }
+
+            Report($"Renamed to “{canonical}”.", busy: false);
+        }
+        catch (Exception ex)
+        {
+            Report($"Rename failed: {ex.Message}", busy: false);
+        }
+    }
+
     /// <summary>Re-fetch box art for a single game (overwrites only on success).</summary>
     public async Task DownloadArtAsync(GameTile tile)
     {

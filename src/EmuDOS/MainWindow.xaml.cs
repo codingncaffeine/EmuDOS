@@ -150,6 +150,20 @@ public partial class MainWindow : Window
 
     // Edit the command-line arguments passed to the game's program on launch (persisted to the
     // profile). Some games need a sound/mode switch and have no SETUP to do it.
+    private async void RenameFromScreenScraper(GameTile tile)
+    {
+        var dialog = new TextPromptDialog(
+            $"Rename from ScreenScraper — {tile.Title}",
+            "Type the game's name to look up. It'll be renamed to ScreenScraper's matched title and its " +
+            "art and details refreshed. Use the exact title (e.g. \"King's Quest VI\") for ones the " +
+            "automatic match can't find.",
+            tile.Title) { Owner = this };
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.Value))
+            return;
+        if (Vm is not null)
+            await Vm.RenameFromScreenScraperAsync(tile, dialog.Value.Trim());
+    }
+
     private void EditLaunchParameters(GameTile tile)
     {
         var services = ((App)Application.Current).Services;
@@ -602,6 +616,7 @@ public partial class MainWindow : Window
         var overflow = new List<(string, Action)>
         {
             ("Manage…", () => new ManageGameWindow(services, tile.Game) { Owner = this }.ShowDialog()),
+            ("Rename from ScreenScraper…", () => RenameFromScreenScraper(tile)),
             ("Game preferences…", () => OpenOptions(tile)),
             ("Open in DOS", () => _ = LaunchGameAsync(tile, bootToDos: true)),
             ("Launch parameters…", () => EditLaunchParameters(tile)),

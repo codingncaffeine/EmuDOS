@@ -53,6 +53,10 @@ public sealed class ArtService(ScreenScraperClient screenScraper, SteamGridDbCli
     public Task<Core.Model.GameMetadata?> FetchMetadataAsync(string gameName, CancellationToken cancellationToken = default)
         => screenScraper.FetchMetadataAsync(gameName, cancellationToken);
 
+    /// <summary>Resolve a lookup term to ScreenScraper's canonical game name (for the manual rename), or null.</summary>
+    public Task<string?> ResolveNameAsync(string gameName, CancellationToken cancellationToken = default)
+        => screenScraper.ResolveNameAsync(gameName, cancellationToken);
+
     /// <summary>Fetch a game's gameplay video snap from ScreenScraper and save it to
     /// <paramref name="destPath"/> (an .mp4). Returns true on success. ScreenScraper-only — SteamGridDB
     /// has no video.</summary>
