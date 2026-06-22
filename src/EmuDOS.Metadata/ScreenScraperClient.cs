@@ -38,14 +38,8 @@ public sealed partial class ScreenScraperClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
 
-        foreach (var candidate in NameCandidates(gameName))
-        {
-            var url = await FetchMediaForNameAsync(candidate, PickBox, cancellationToken);
-            if (url is not null)
-                return url;
-        }
-
-        return null;
+        var medias = (await ResolveJeuAsync(gameName, cancellationToken))?["medias"]?.AsArray();
+        return medias is null ? null : PickBox(medias);
     }
 
     /// <summary>
@@ -56,14 +50,8 @@ public sealed partial class ScreenScraperClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
 
-        foreach (var candidate in NameCandidates(gameName))
-        {
-            var url = await FetchMediaForNameAsync(candidate, PickBox3D, cancellationToken);
-            if (url is not null)
-                return url;
-        }
-
-        return null;
+        var medias = (await ResolveJeuAsync(gameName, cancellationToken))?["medias"]?.AsArray();
+        return medias is null ? null : PickBox3D(medias);
     }
 
     /// <summary>Find the game's manual (PDF) URL, or null if ScreenScraper has none.</summary>
@@ -71,14 +59,8 @@ public sealed partial class ScreenScraperClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
 
-        foreach (var candidate in NameCandidates(gameName))
-        {
-            var url = await FetchMediaForNameAsync(candidate, PickManual, cancellationToken);
-            if (url is not null)
-                return url;
-        }
-
-        return null;
+        var medias = (await ResolveJeuAsync(gameName, cancellationToken))?["medias"]?.AsArray();
+        return medias is null ? null : PickManual(medias);
     }
 
     /// <summary>Find a gameplay video-snap URL (prefers the smaller "video-normalized" media, falling
@@ -87,14 +69,8 @@ public sealed partial class ScreenScraperClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
 
-        foreach (var candidate in NameCandidates(gameName))
-        {
-            var url = await FetchMediaForNameAsync(candidate, PickVideo, cancellationToken);
-            if (url is not null)
-                return url;
-        }
-
-        return null;
+        var medias = (await ResolveJeuAsync(gameName, cancellationToken))?["medias"]?.AsArray();
+        return medias is null ? null : PickVideo(medias);
     }
 
     /// <summary>
@@ -105,32 +81,12 @@ public sealed partial class ScreenScraperClient
         string gameName, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
-
-        foreach (var candidate in NameCandidates(gameName))
-            foreach (var systemPart in new[] { $"&systemeid={DosSystemId}", "" })
-            {
-                var url = $"{BaseUrl}jeuInfos.php?{Auth()}{systemPart}&romnom={Esc(candidate)}";
-                using var response = await _http.GetAsync(url, cancellationToken);
-                if (!response.IsSuccessStatusCode)
-                    continue;
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (ExtractMetadata(body) is { } md)
-                    return md;
-            }
-
-        return null;
+        var jeu = await ResolveJeuAsync(gameName, cancellationToken);
+        return jeu is null ? null : ExtractMetadataFromJeu(jeu);
     }
 
-    private static EmuDOS.Core.Model.GameMetadata? ExtractMetadata(string json)
+    private static EmuDOS.Core.Model.GameMetadata? ExtractMetadataFromJeu(JsonNode jeu)
     {
-        JsonNode? doc;
-        try { doc = JsonNode.Parse(json); }
-        catch { return null; }
-
-        var jeu = doc?["response"]?["jeu"];
-        if (jeu is null)
-            return null;
-
         var year = PickRegional(jeu["dates"]?.AsArray(), "text", ["us", "wor", "ss", "eu", "jp"]);
         if (!string.IsNullOrEmpty(year) && year.Length >= 4 && int.TryParse(year[..4], out _))
             year = year[..4];
@@ -217,28 +173,134 @@ public sealed partial class ScreenScraperClient
             : null;
     }
 
-    // Try the DOS system first (best box-art match); if nothing's found, retry across all systems —
-    // ScreenScraper catalogues some big multi-platform hits under a canonical system, not "PC Dos".
-    private async Task<string?> FetchMediaForNameAsync(
-        string gameName, Func<JsonArray, string?> pick, CancellationToken cancellationToken)
+    // Resolve a game to its ScreenScraper "jeu" node, shared by every art/metadata/snap/manual lookup.
+    // First the romnom candidates (DOS system, then all systems for multi-platform hits); if those all
+    // miss, fall back to a fuzzy name search (jeuRecherche), which bridges titles SS lists under a
+    // subtitle or different punctuation (e.g. "Police Quest 1" -> "Police Quest: In Pursuit of the
+    // Death Angel", "Kings Quest 5" -> "King's Quest V", "7th Guest" -> "The 7th Guest").
+    private async Task<JsonNode?> ResolveJeuAsync(string gameName, CancellationToken ct)
     {
+        foreach (var candidate in NameCandidates(gameName))
+            foreach (var systemPart in new[] { $"&systemeid={DosSystemId}", "" })
+                if (await JeuInfosAsync($"{systemPart}&romnom={Esc(candidate)}", ct) is { } jeu)
+                    return jeu;
+
+        var gameId = await SearchBestGameIdAsync(gameName, ct);
+        if (gameId is not null && await JeuInfosAsync($"&gameid={Esc(gameId)}", ct) is { } byId)
+            return byId;
+
+        return null;
+    }
+
+    private async Task<JsonNode?> JeuInfosAsync(string query, CancellationToken ct)
+    {
+        var url = $"{BaseUrl}jeuInfos.php?{Auth()}{query}";
+        using var response = await _http.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode)
+            return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        try { return JsonNode.Parse(body)?["response"]?["jeu"]; }
+        catch { return null; }
+    }
+
+    // ScreenScraper's fuzzy name search. Scores every result by name similarity to the wanted title
+    // (numeral-normalized, prefix + edit-distance) and returns the best id — so we don't grab a more
+    // famous same-prefix game ("Duke Nukem 1" must not resolve to "Duke Nukem 3D"). Biased to DOS,
+    // then all systems. Null if nothing scores well enough.
+    private async Task<string?> SearchBestGameIdAsync(string gameName, CancellationToken ct)
+    {
+        var wanted = NormalizeForCompare(gameName);
+        if (wanted.Length == 0)
+            return null;
+
         foreach (var systemPart in new[] { $"&systemeid={DosSystemId}", "" })
         {
-            var url = $"{BaseUrl}jeuInfos.php?{Auth()}{systemPart}&romnom={Esc(gameName)}";
-            using var response = await _http.GetAsync(url, cancellationToken);
+            var url = $"{BaseUrl}jeuRecherche.php?{Auth()}{systemPart}&recherche={Esc(StripNoise(gameName))}";
+            using var response = await _http.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
                 continue;
+            var body = await response.Content.ReadAsStringAsync(ct);
 
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            JsonNode? doc;
-            try { doc = JsonNode.Parse(body); }
+            string? bestId = null;
+            double bestScore = 0;
+            try
+            {
+                var jeux = JsonNode.Parse(body)?["response"]?["jeux"]?.AsArray();
+                if (jeux is null)
+                    continue;
+                foreach (var jeu in jeux)
+                {
+                    if (jeu?["id"]?.ToString() is not { Length: > 0 } id)
+                        continue;
+                    foreach (var nom in GameNames(jeu))
+                    {
+                        var score = NameScore(wanted, NormalizeForCompare(nom));
+                        if (score > bestScore) { bestScore = score; bestId = id; }
+                    }
+                }
+            }
             catch { continue; }
 
-            var medias = doc?["response"]?["jeu"]?["medias"]?.AsArray();
-            if (medias is not null && pick(medias) is { Length: > 0 } url2)
-                return url2;
+            if (bestId is not null && bestScore >= 0.6)
+                return bestId;
         }
         return null;
+    }
+
+    // All textual names a jeuRecherche result carries (regional names array + a flat "nom").
+    private static IEnumerable<string> GameNames(JsonNode jeu)
+    {
+        if (AsString(jeu["nom"]) is { } flat)
+            yield return flat;
+        if (jeu["noms"]?.AsArray() is { } noms)
+            foreach (var item in noms)
+            {
+                if (AsString(item) is { } direct)
+                    yield return direct;
+                else if (item is JsonObject obj)
+                    foreach (var kv in obj)
+                        if ((kv.Key == "text" || kv.Key.StartsWith("nom", StringComparison.Ordinal))
+                            && AsString(kv.Value) is { } t)
+                            yield return t;
+            }
+    }
+
+    private static string? AsString(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s : null;
+
+    // Lowercase, numeral-normalized (Roman->Arabic so "V" == "5"), alphanumerics only.
+    private static string NormalizeForCompare(string name)
+    {
+        var s = SwapNumeralStyle(StripNoise(name), toRoman: false).ToLowerInvariant();
+        return new string(s.Where(char.IsLetterOrDigit).ToArray());
+    }
+
+    // Best of common-prefix ratio and edit-distance ratio — prefix rewards "policequest" matching
+    // "policequestinpursuit…", edit-distance rewards near-equal full names.
+    private static double NameScore(string a, string b)
+    {
+        if (a.Length == 0 || b.Length == 0)
+            return 0;
+        int prefix = 0;
+        while (prefix < a.Length && prefix < b.Length && a[prefix] == b[prefix])
+            prefix++;
+        double prefixScore = (double)prefix / Math.Min(a.Length, b.Length);
+        double editScore = 1.0 - (double)Levenshtein(a, b) / Math.Max(a.Length, b.Length);
+        return Math.Max(prefixScore, editScore);
+    }
+
+    private static int Levenshtein(string a, string b)
+    {
+        var d = new int[a.Length + 1, b.Length + 1];
+        for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+        for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+        for (int i = 1; i <= a.Length; i++)
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+            }
+        return d[a.Length, b.Length];
     }
 
     /// <summary>Title-match candidates for ScreenScraper, most-specific first: the exact title, then
