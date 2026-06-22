@@ -555,7 +555,7 @@ public partial class MainWindow : Window
         _dragPanel.InvalidateArrange();
     }
 
-    private async void OnBoxMouseUp(object sender, MouseButtonEventArgs e)
+    private void OnBoxMouseUp(object sender, MouseButtonEventArgs e)
     {
         (sender as FrameworkElement)?.ReleaseMouseCapture();
 
@@ -576,7 +576,7 @@ public partial class MainWindow : Window
         if (Vm?.IsEditMode == true || (sender as FrameworkElement)?.DataContext is not GameTile tile)
             return;
 
-        // Ctrl+click toggles selection (for delete); a plain click launches.
+        // Ctrl+click toggles selection (for delete); a plain click opens the game card.
         if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
             tile.IsSelected = !tile.IsSelected;
@@ -585,7 +585,37 @@ public partial class MainWindow : Window
         }
 
         Vm?.ClearSelection();
-        await LaunchGameAsync(tile);
+        OpenGameCard(tile);
+    }
+
+    private GameDetailWindow? _openCard;
+
+    /// <summary>Open the per-game detail card (Play launches; ★ favorites; "…" has the rest).</summary>
+    private void OpenGameCard(GameTile tile)
+    {
+        _openCard?.Close();
+        var services = ((App)Application.Current).Services;
+
+        var overflow = new List<(string, Action)>
+        {
+            ("Manage…", () => new ManageGameWindow(services, tile.Game) { Owner = this }.ShowDialog()),
+            ("Game preferences…", () => OpenOptions(tile)),
+            ("Open in DOS", () => _ = LaunchGameAsync(tile, bootToDos: true)),
+            ("Launch parameters…", () => EditLaunchParameters(tile)),
+            ("Download manual", () => _ = DownloadManualAsync(tile)),
+        };
+
+        var executables = OrderedExecutables(
+            services.Store.ReadState(tile.Game.GameboxPath),
+            ScanExecutables(Path.Combine(tile.Game.GameboxPath, "content")));
+        foreach (var installed in PureSave.ListInstalledExecutables(Path.Combine(tile.Game.GameboxPath, "saves")))
+            if (!executables.Contains(installed, StringComparer.OrdinalIgnoreCase))
+                executables.Add(installed);
+        if (executables.Count > 0)
+            overflow.Add(("Choose program…", () => ChooseProgram(tile, executables)));
+
+        _openCard = new GameDetailWindow(tile, services, () => _ = LaunchGameAsync(tile), overflow) { Owner = this };
+        _openCard.Show();
     }
 
     /// <summary>Re-apply a saved calibration layout (manual box positions) by title.</summary>
@@ -852,7 +882,7 @@ public partial class MainWindow : Window
             services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir);
         services.Library.RecordPlay(tile.Id);
 
-        new EmulatorWindow(engine, instance) { Owner = this }.Show();
+        new EmulatorWindow(engine, instance, tile.Id) { Owner = this }.Show();
         Vm.ClearStatus();
     }
 }

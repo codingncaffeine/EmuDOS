@@ -134,6 +134,30 @@ public sealed class LibraryDatabase
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Add to a game's total play-time (called at session end). No-op for non-positive seconds.</summary>
+    public void AddPlayTime(long gameId, int seconds)
+    {
+        if (seconds <= 0)
+            return;
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "UPDATE Games SET TotalPlayTimeSeconds = TotalPlayTimeSeconds + $sec WHERE Id = $id;";
+        Bind(cmd, "$sec", seconds);
+        Bind(cmd, "$id", gameId);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>A single game by id (fresh stats), or null if it's gone.</summary>
+    public LibraryGame? GetGame(long id)
+    {
+        using var connection = Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {GameColumns} FROM Games WHERE Id = $id;";
+        Bind(cmd, "$id", id);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? MapGame(reader) : null;
+    }
+
     public void RecordPlay(long gameId)
     {
         using var connection = Open();
@@ -192,7 +216,7 @@ public sealed class LibraryDatabase
     }
 
     private const string GameColumns =
-        "Id, GameboxPath, Title, CanonicalId, Executable, Machine, DateAdded, LastPlayed, PlayCount, IsFavorite";
+        "Id, GameboxPath, Title, CanonicalId, Executable, Machine, DateAdded, LastPlayed, PlayCount, IsFavorite, TotalPlayTimeSeconds";
 
     private LibraryGame? GetByPath(SqliteConnection connection, string gameboxPath)
     {
@@ -215,6 +239,7 @@ public sealed class LibraryDatabase
         LastPlayed = r.IsDBNull(7) ? null : ParseDate(r.GetString(7)),
         PlayCount = r.GetInt32(8),
         IsFavorite = r.GetInt32(9) != 0,
+        TotalPlayTimeSeconds = r.GetInt64(10),
     };
 
     private SqliteConnection Open()
@@ -263,6 +288,17 @@ public sealed class LibraryDatabase
             }
 
             SetUserVersion(connection, 1);
+        }
+
+        if (UserVersion(connection) < 2)
+        {
+            using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = "ALTER TABLE Games ADD COLUMN TotalPlayTimeSeconds INTEGER NOT NULL DEFAULT 0;";
+                cmd.ExecuteNonQuery();
+            }
+
+            SetUserVersion(connection, 2);
         }
     }
 

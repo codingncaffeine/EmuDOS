@@ -34,6 +34,9 @@ public sealed record LibraryGame
     public int PlayCount { get; init; }
 
     public bool IsFavorite { get; init; }
+
+    /// <summary>Total seconds the game has been played (summed across sessions).</summary>
+    public long TotalPlayTimeSeconds { get; init; }
 }
 
 /// <summary>A media file (art/manual/…) linked to a game.</summary>

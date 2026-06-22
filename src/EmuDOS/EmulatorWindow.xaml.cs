@@ -57,6 +57,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private readonly GameInstance _instance;
     private readonly AppLog _log;
+    private readonly long _gameId;                       // library id, for play-time accrual
+    private readonly DateTime _sessionStart = DateTime.UtcNow;
 
     private readonly object _inputLock = new();
     private readonly HashSet<DosKey> _keysDown = [];
@@ -76,11 +78,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private DispatcherTimer? _hintTimer;
     private Point? _lastMouse;
 
-    public EmulatorWindow(IDosEngine engine, GameInstance instance)
+    public EmulatorWindow(IDosEngine engine, GameInstance instance, long gameId = 0)
     {
         InitializeComponent();
         DarkChrome.Apply(this);
         _instance = instance;
+        _gameId = gameId;
         Title = $"EmuDOS — {instance.Profile.Title}";
 
         var settings = ((App)Application.Current).Services.Settings;
@@ -865,6 +868,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         }
 
         SaveGameState();
+        try
+        {
+            var seconds = (int)(DateTime.UtcNow - _sessionStart).TotalSeconds;
+            ((App)Application.Current).Services.Library.AddPlayTime(_gameId, seconds);
+        }
+        catch { /* play-time is a convenience; never block closing */ }
         _lcdTimer?.Stop();
         _lcdWindow?.Close();
         _session.Stop();
