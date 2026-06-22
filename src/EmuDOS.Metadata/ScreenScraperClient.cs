@@ -107,15 +107,16 @@ public sealed partial class ScreenScraperClient
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
 
         foreach (var candidate in NameCandidates(gameName))
-        {
-            var url = $"{BaseUrl}jeuInfos.php?{Auth()}&systemeid={DosSystemId}&romnom={Esc(candidate)}";
-            using var response = await _http.GetAsync(url, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                continue;
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (ExtractMetadata(body) is { } md)
-                return md;
-        }
+            foreach (var systemPart in new[] { $"&systemeid={DosSystemId}", "" })
+            {
+                var url = $"{BaseUrl}jeuInfos.php?{Auth()}{systemPart}&romnom={Esc(candidate)}";
+                using var response = await _http.GetAsync(url, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    continue;
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (ExtractMetadata(body) is { } md)
+                    return md;
+            }
 
         return null;
     }
@@ -216,21 +217,28 @@ public sealed partial class ScreenScraperClient
             : null;
     }
 
+    // Try the DOS system first (best box-art match); if nothing's found, retry across all systems —
+    // ScreenScraper catalogues some big multi-platform hits under a canonical system, not "PC Dos".
     private async Task<string?> FetchMediaForNameAsync(
         string gameName, Func<JsonArray, string?> pick, CancellationToken cancellationToken)
     {
-        var url = $"{BaseUrl}jeuInfos.php?{Auth()}&systemeid={DosSystemId}&romnom={Esc(gameName)}";
-        using var response = await _http.GetAsync(url, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return null;
+        foreach (var systemPart in new[] { $"&systemeid={DosSystemId}", "" })
+        {
+            var url = $"{BaseUrl}jeuInfos.php?{Auth()}{systemPart}&romnom={Esc(gameName)}";
+            using var response = await _http.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                continue;
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        JsonNode? doc;
-        try { doc = JsonNode.Parse(body); }
-        catch { return null; }
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            JsonNode? doc;
+            try { doc = JsonNode.Parse(body); }
+            catch { continue; }
 
-        var medias = doc?["response"]?["jeu"]?["medias"]?.AsArray();
-        return medias is null ? null : pick(medias);
+            var medias = doc?["response"]?["jeu"]?["medias"]?.AsArray();
+            if (medias is not null && pick(medias) is { Length: > 0 } url2)
+                return url2;
+        }
+        return null;
     }
 
     /// <summary>Title-match candidates for ScreenScraper, most-specific first: the exact title, then
@@ -244,9 +252,12 @@ public sealed partial class ScreenScraperClient
         {
             name,                                   // exact
             bare,                                    // noise stripped
+            HyphensToSpaces(bare),                   // "Lotus-The-Ultimate-Challenge" -> spaces
             SwapNumeralStyle(bare, toRoman: true),   // "Dungeon Master 2" -> "II"
-            SwapNumeralStyle(bare, toRoman: false),  // "Dungeon Master II" -> "2"
+            SwapNumeralStyle(bare, toRoman: false),  // "Ishar II" -> "2"
             BaseTitle(bare),                         // "Carmageddon - High Octane" -> "Carmageddon"
+            StripArticle(bare),                      // "The 7th Guest" -> "7th Guest" (and the reverse miss)
+            DropTrailingNumber(bare),                // "Duke Nukem 1" / "Dark Ages 1" -> base (tried late)
             CleanTitle(bare),                        // episode/collection words removed
         };
 
@@ -289,13 +300,29 @@ public sealed partial class ScreenScraperClient
     // and version tokens; the remaining bare title is what ScreenScraper matches best.
     private static string StripNoise(string name)
     {
-        var s = name;
+        var s = name.Replace('_', ' '); // underscores are separators (e.g. "..._DOS_EN")
         for (int i = 0; i < 4 && ParenBracketRegex().IsMatch(s); i++)
             s = ParenBracketRegex().Replace(s, " ");
         s = VersionRegex().Replace(s, " ");
+        s = TrailingTagRegex().Replace(s, ""); // trailing platform/language tags ("DOS", "EN", ...)
+        s = LetterDigitRegex().Replace(s, "$1 $2"); // "Prince of Persia2" -> "Prince of Persia 2"
         s = Regex.Replace(s, @"\s+", " ").Trim().Trim('-', ':', '–', ',', '.').Trim();
         return s;
     }
+
+    // Hyphen-separated titles ("Lotus-The-Ultimate-Challenge") — a fallback candidate, so intra-word
+    // hyphens (e.g. "X-COM") still match their exact form first.
+    private static string HyphensToSpaces(string name) =>
+        name.Contains('-') ? Regex.Replace(name.Replace('-', ' '), @"\s+", " ").Trim() : name;
+
+    // Leading article — ScreenScraper sometimes lists "The X" while our title omits it (or vice-versa).
+    private static string StripArticle(string name) =>
+        Regex.Replace(name, @"^(the|a|an)\s+", "", RegexOptions.IgnoreCase);
+
+    // A trailing shareware episode number ("Duke Nukem 1", "Dark Ages 1") that SS lists without — tried
+    // late, so true sequels still match their own numbered entry first.
+    private static string DropTrailingNumber(string name) =>
+        Regex.Replace(name, @"\s+\d{1,2}$", "");
 
     private static string CleanTitle(string name)
     {
@@ -415,4 +442,12 @@ public sealed partial class ScreenScraperClient
     // An edition/subtitle separator: " - ", " – ", or " : ".
     [GeneratedRegex(@"\s+[-–:]\s+")]
     private static partial Regex SubtitleRegex();
+
+    // Trailing platform/language tags left by some dumps ("... DOS EN").
+    [GeneratedRegex(@"(\s+(dos|cd|en|eng|de|fr|es|usa|eur|world|wor))+$", RegexOptions.IgnoreCase)]
+    private static partial Regex TrailingTagRegex();
+
+    // A letter immediately followed by a digit ("Persia2") — split so sequel numbers stand alone.
+    [GeneratedRegex(@"([A-Za-z])([0-9])")]
+    private static partial Regex LetterDigitRegex();
 }
