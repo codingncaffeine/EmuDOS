@@ -19,9 +19,9 @@ using EmuDOS.ViewModels;
 namespace EmuDOS;
 
 /// <summary>
-/// The per-game detail card: box art, title, play stats, and the action row (Play / Favorite / "…").
-/// A transparent full-window scrim over the shelf; click outside or Esc to dismiss. Imperative
-/// (PopulateData-style) — no MVVM binding. Later phases add metadata and a looping video snap.
+/// The per-game detail card: a floating card over the shelf (no dimming, stays on top of the app)
+/// with a 4:3 art/video-snap banner, meta and activity pills, and Play / Favorite / "…" actions.
+/// Imperative (Populate-style), modelled on Emutastic's card and themed with EmuDOS's tokens.
 /// </summary>
 public partial class GameDetailWindow : Window
 {
@@ -44,13 +44,21 @@ public partial class GameDetailWindow : Window
 
     private void Populate()
     {
-        TitleText.Text = _tile.Title;
-        ArtImage.Source = _tile.Cover; // already a frozen BitmapImage loaded by the tile
+        ArtPlaceholderText.Text = _tile.Title;
+        GameTitle.Text = _tile.Title;
+        MachineTag.Text = "DOS";
+
+        if (_tile.Cover is { } cover)
+        {
+            HeaderImage.Source = cover;
+            HeaderImage.Visibility = Visibility.Visible;
+            ArtPlaceholderText.Visibility = Visibility.Collapsed;
+        }
 
         var g = _services.Library.GetGame(_tile.Id) ?? _tile.Game; // fresh stats
         _isFavorite = g.IsFavorite;
-        UpdateFavButton();
-        StatsText.Text = BuildStats(g);
+        UpdateFavorite();
+        PopulateStats(g);
 
         if (_services.Store.ReadMetadata(_tile.Game.GameboxPath) is { } md)
             PopulateMetadata(md);
@@ -58,65 +66,37 @@ public partial class GameDetailWindow : Window
         _ = LoadSnapAsync();
     }
 
-    private void PopulateMetadata(GameMetadata md)
+    private void PopulateStats(LibraryGame g)
     {
-        AddMetaLine("Genre", md.Genre);
-        AddMetaLine("Year", md.Year);
-        AddMetaLine("Developer", md.Developer);
-        AddMetaLine("Publisher", md.Publisher);
-
-        if (!string.IsNullOrWhiteSpace(md.Description))
+        StatPlayed.Text = g.PlayCount == 0
+            ? "Never played"
+            : $"{g.PlayCount} play{(g.PlayCount == 1 ? "" : "s")}";
+        if (g.TotalPlayTimeSeconds > 0)
         {
-            BodyPanel.Children.Add(new TextBlock
-            {
-                Text = "Description",
-                Foreground = (Brush)FindResource("TextSecondary"),
-                FontSize = 11,
-                Margin = new Thickness(0, 14, 0, 3),
-            });
-            BodyPanel.Children.Add(new TextBlock
-            {
-                Text = md.Description,
-                Foreground = (Brush)FindResource("TextPrimary"),
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-            });
+            StatPlayTime.Text = FormatDuration(g.TotalPlayTimeSeconds);
+            PlayTimePill.Visibility = Visibility.Visible;
         }
     }
 
-    private void AddMetaLine(string label, string? value)
+    private void PopulateMetadata(GameMetadata md)
+    {
+        SetPill(YearPill, GameYear, md.Year);
+        SetPill(DeveloperPill, GameDeveloper, string.IsNullOrWhiteSpace(md.Developer) ? md.Publisher : md.Developer);
+        SetPill(GenrePill, GameGenre, md.Genre);
+
+        if (!string.IsNullOrWhiteSpace(md.Description))
+        {
+            GameDescription.Text = md.Description;
+            GameDescriptionScroll.Visibility = Visibility.Visible;
+        }
+    }
+
+    private static void SetPill(Border pill, TextBlock text, string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return;
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 5) };
-        row.Children.Add(new TextBlock
-        {
-            Text = label,
-            Foreground = (Brush)FindResource("TextSecondary"),
-            FontSize = 12,
-            Width = 86,
-        });
-        row.Children.Add(new TextBlock
-        {
-            Text = value,
-            Foreground = (Brush)FindResource("TextPrimary"),
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap,
-        });
-        BodyPanel.Children.Add(row);
-    }
-
-    private static string BuildStats(LibraryGame g)
-    {
-        var parts = new List<string>
-        {
-            g.PlayCount == 0 ? "Never played" : $"Played {g.PlayCount} time{(g.PlayCount == 1 ? "" : "s")}",
-        };
-        if (g.TotalPlayTimeSeconds > 0)
-            parts.Add($"{FormatDuration(g.TotalPlayTimeSeconds)} played");
-        if (g.LastPlayed is { } lp)
-            parts.Add($"Last played {lp.LocalDateTime:d}");
-        return string.Join("   ·   ", parts);
+        text.Text = value;
+        pill.Visibility = Visibility.Visible;
     }
 
     public static string FormatDuration(long seconds) => seconds switch
@@ -127,12 +107,13 @@ public partial class GameDetailWindow : Window
         _ => $"{seconds / 3600}h",
     };
 
-    private void UpdateFavButton()
+    private void UpdateFavorite()
     {
-        FavButton.Content = _isFavorite ? "★ Favorited" : "☆ Favorite";
-        FavButton.Foreground = _isFavorite
+        FavoriteButton.Content = _isFavorite ? "♥  Favorited" : "♡  Favorite";
+        FavoriteButton.Foreground = _isFavorite
             ? new SolidColorBrush((Color)FindResource("AccentColor"))
             : (Brush)FindResource("TextPrimary");
+        FavoriteBadge.Visibility = _isFavorite ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnFavorite(object sender, RoutedEventArgs e)
@@ -140,7 +121,7 @@ public partial class GameDetailWindow : Window
         _isFavorite = !_isFavorite;
         _services.Library.SetFavorite(_tile.Id, _isFavorite);
         _tile.IsFavorite = _isFavorite; // live-updates the shelf heart badge
-        UpdateFavButton();
+        UpdateFavorite();
     }
 
     private void OnPlay(object sender, RoutedEventArgs e)
@@ -162,9 +143,7 @@ public partial class GameDetailWindow : Window
         menu.IsOpen = true;
     }
 
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
-
-    private void OnScrimDown(object sender, MouseButtonEventArgs e) => Close();
+    private void OnClose(object sender, MouseButtonEventArgs e) => Close();
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
@@ -172,7 +151,7 @@ public partial class GameDetailWindow : Window
             Close();
     }
 
-    // ── Video snap (ScreenScraper, cached in the retained Snaps folder; placeholder → crossfade) ──
+    // ── Video snap (ScreenScraper, cached in the retained Snaps folder; banner placeholder → crossfade) ──
     private LibVLCSharp.Shared.MediaPlayer? _vlcPlayer;
     private WriteableBitmap? _videoBitmap;
     private IntPtr _videoBuffer;
@@ -185,18 +164,14 @@ public partial class GameDetailWindow : Window
             var snapPath = Path.Combine(_services.Paths.SnapsDir, SnapKey() + ".mp4");
             if (!File.Exists(snapPath))
             {
-                // Fetch from ScreenScraper into the retained cache (survives game deletion).
                 if (!await _services.Art.FetchSnapAsync(_tile.Title, snapPath) || _closed)
                     return;
             }
             if (_closed || !File.Exists(snapPath))
                 return;
-
-            SnapPlaceholder.Source = _tile.Cover; // box-art placeholder until the first video frame
-            SnapArea.Visibility = Visibility.Visible;
             await PlaySnapVideoAsync(snapPath);
         }
-        catch { /* no snap available — leave the snap area hidden */ }
+        catch { /* no snap — the banner keeps showing the cover art */ }
     }
 
     private string SnapKey()
@@ -214,7 +189,7 @@ public partial class GameDetailWindow : Window
             Marshal.FreeHGlobal(_videoBuffer);
         _videoBuffer = Marshal.AllocHGlobal(stride * h);
         _videoBitmap = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgr32, null);
-        SnapVideo.Source = _videoBitmap;
+        VideoImage.Source = _videoBitmap;
 
         IntPtr bufferPtr = _videoBuffer;
         var libVLC = await VideoPlaybackService.Instance.GetLibVLCAsync();
@@ -237,10 +212,10 @@ public partial class GameDetailWindow : Window
                     if (!_crossfadeDone)
                     {
                         _crossfadeDone = true;
-                        SnapVideo.Visibility = Visibility.Visible;
+                        VideoImage.Visibility = Visibility.Visible;
                         var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400));
-                        fade.Completed += (_, _) => SnapPlaceholder.Visibility = Visibility.Collapsed;
-                        SnapPlaceholder.BeginAnimation(OpacityProperty, fade);
+                        fade.Completed += (_, _) => HeaderImage.Visibility = Visibility.Collapsed;
+                        HeaderImage.BeginAnimation(OpacityProperty, fade);
                     }
                 }));
 
@@ -256,7 +231,6 @@ public partial class GameDetailWindow : Window
             bool keep = false;
             try
             {
-                // Stash + start atomically on the UI thread so OnClosed can't dispose mid-Play.
                 Dispatcher.Invoke(() =>
                 {
                     if (_closed)
