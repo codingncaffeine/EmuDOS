@@ -134,6 +134,16 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 profile = resolver.Resolve(profile, contentFiles!);
             }
 
+            // eXoDOS games ship a DOSBOX.BAT that is the authoritative launch recipe (mount the disc,
+            // cd into the install, run the game — frequently the game binary lives on the CD). When it
+            // mounts a disc, reproduce it verbatim instead of the heuristic exe pick, which can land on
+            // a setup utility (e.g. ASK.COM) and never start the game.
+            if (discMount is null && DosBoxBatLaunch.TryParse(box.ContentDir) is { } exoLaunch)
+            {
+                profile = profile with { Launch = exoLaunch };
+                chosen = null;
+            }
+
             // A folder/zip game with its own files PLUS a bundled CD image (e.g. a cd\*.cue) needs
             // that disc mounted as D:, or it asks for "disk 1" / fails its CD check. Done after the
             // resolver, whose curated launch can drop pre-commands.
