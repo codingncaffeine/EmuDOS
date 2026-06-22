@@ -271,13 +271,17 @@ public partial class GameDetailWindow : Window
         _closed = true;
         var player = _vlcPlayer;
         _vlcPlayer = null;
-        if (player is not null)
-            Task.Run(() => { try { player.Stop(); } catch { } try { player.Dispose(); } catch { } });
-        if (_videoBuffer != IntPtr.Zero)
+        var buffer = _videoBuffer;
+        _videoBuffer = IntPtr.Zero; // display callback sees Zero and no-ops from here on
+        Task.Run(() =>
         {
-            Marshal.FreeHGlobal(_videoBuffer);
-            _videoBuffer = IntPtr.Zero;
-        }
+            try { player?.Stop(); } catch { }
+            try { player?.Dispose(); } catch { }
+            // Free the frame buffer ONLY after the player is fully disposed, so VLC's decode
+            // thread can't write into freed memory (that use-after-free was the click-away crash).
+            if (buffer != IntPtr.Zero)
+                Marshal.FreeHGlobal(buffer);
+        });
         base.OnClosed(e);
     }
 }

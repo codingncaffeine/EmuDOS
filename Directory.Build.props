@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      NU1903: transitive SQLitePCLRaw.lib.e_sqlite3 2.1.11 carries a SQLite advisory
+      (GHSA-2m69-gcr7-jv3q). It's pulled by Microsoft.Data.Sqlite 10.0.9 (the latest), and no
+      patched SQLitePCLRaw is published yet, so there's nothing to upgrade to. EmuDOS uses SQLite
+      only for its own local, rebuildable library index — never untrusted DB files or SQL input —
+      so the real exposure is negligible. Suppress just this advisory; revisit when a fix ships.
+    -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+  </PropertyGroup>
+</Project>

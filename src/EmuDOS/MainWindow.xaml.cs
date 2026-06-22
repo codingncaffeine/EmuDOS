@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DarkChrome.Apply(this);
+        // Click anywhere in the app (the shelf) to dismiss an open card — in addition to its ✕/Esc.
+        // (Deactivated never fires for owned windows, so we close it from the owner's click instead.)
+        PreviewMouseDown += (_, _) => _openCard?.Close();
     }
 
     private MainViewModel? Vm => DataContext as MainViewModel;
@@ -615,6 +618,7 @@ public partial class MainWindow : Window
             overflow.Add(("Choose program…", () => ChooseProgram(tile, executables)));
 
         _openCard = new GameDetailWindow(tile, services, () => _ = LaunchGameAsync(tile), overflow) { Owner = this };
+        _openCard.Closed += (s, _) => { if (ReferenceEquals(_openCard, s)) _openCard = null; };
         _openCard.Show();
     }
 

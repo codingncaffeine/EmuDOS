@@ -12,11 +12,13 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        CrashLog.Install(this); // record unhandled exceptions (incl. failures during startup below)
         Services = new AppServices();
         Core.Audio.Mt32Synth.RegisterNativeResolver(Services.Paths.CoresDir);
         var viewModel = new MainViewModel(Services);
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
+        UiFreezeWatchdog.Instance.Start(Dispatcher); // log UI stalls to ui_freezes.log
 
         // Dev/smoke hooks (env-gated): import then auto-play a game on startup.
         var autoImport = Environment.GetEnvironmentVariable("EMUDOS_AUTOIMPORT");
