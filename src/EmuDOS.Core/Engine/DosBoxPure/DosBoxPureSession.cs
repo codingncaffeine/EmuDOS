@@ -80,9 +80,15 @@ public sealed class DosBoxPureSession : IDosSession
 
     public void Stop() => _running = false;
 
-    public bool SaveState(int slot) => RunOnCoreThread(() => DoSaveState(slot));
+    public byte[]? SaveStateBytes()
+    {
+        byte[]? data = null;
+        RunOnCoreThread(() => (data = _core?.SaveState()) is not null);
+        return data;
+    }
 
-    public bool LoadState(int slot) => RunOnCoreThread(() => DoLoadState(slot));
+    public bool LoadStateBytes(byte[] data) =>
+        RunOnCoreThread(() => _core is not null && _core.LoadState(data));
 
     public void Dispose()
     {
@@ -336,25 +342,6 @@ public sealed class DosBoxPureSession : IDosSession
         Interlocked.Increment(ref _kbHits);
         return 1;
     }
-
-    private bool DoSaveState(int slot)
-    {
-        var data = _core?.SaveState();
-        if (data is null)
-            return false;
-        Directory.CreateDirectory(_instance.SavePath);
-        File.WriteAllBytes(SlotPath(slot), data);
-        return true;
-    }
-
-    private bool DoLoadState(int slot)
-    {
-        var path = SlotPath(slot);
-        return File.Exists(path) && _core is not null && _core.LoadState(File.ReadAllBytes(path));
-    }
-
-    private string SlotPath(int slot) =>
-        Path.Combine(_instance.SavePath, $"state{slot}.sav");
 
     /// <summary>Queue work to run on the core thread between frames and wait for its result.</summary>
     private bool RunOnCoreThread(Func<bool> action)

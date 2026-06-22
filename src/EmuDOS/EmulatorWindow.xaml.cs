@@ -708,13 +708,64 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         string.Concat(title.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
 
     // Quick save/load use slot 0; the session writes state0.sav into the gamebox's saves folder.
-    private const int QuickSaveSlot = 0;
+    // F5 writes a NEW save state each time (never overwrites); F8 loads the newest.
+    private void QuickSaveState()
+    {
+        var data = _session.SaveStateBytes();
+        if (data is null)
+        {
+            ShowHint("Save state failed");
+            return;
+        }
+        try
+        {
+            Core.Library.SaveStateStore.Write(_instance.SavePath, data, ThumbnailPng());
+            ShowHint("Save state written");
+        }
+        catch (Exception ex)
+        {
+            _log.Info($"Save state write failed: {ex.Message}");
+            ShowHint("Save state failed");
+        }
+    }
 
-    private void QuickSaveState() =>
-        ShowHint(_session.SaveState(QuickSaveSlot) ? "Quick save written" : "Save state failed");
+    private void QuickLoadState()
+    {
+        var newest = Core.Library.SaveStateStore.Newest(_instance.SavePath);
+        var data = newest is null ? null : Core.Library.SaveStateStore.ReadState(newest);
+        if (data is null)
+        {
+            ShowHint("No save state to load");
+            return;
+        }
+        ShowHint(_session.LoadStateBytes(data) ? "Save state loaded" : "Load state failed");
+    }
 
-    private void QuickLoadState() =>
-        ShowHint(_session.LoadState(QuickSaveSlot) ? "Quick save loaded" : "No quick save to load");
+    // A small PNG thumbnail of the current frame for a save state (best-effort; null on failure).
+    private byte[]? ThumbnailPng()
+    {
+        try
+        {
+            if (_bitmap is null)
+                return null;
+            const int targetW = 320;
+            var snap = _bitmap.Clone();
+            snap.Freeze();
+            double scale = Math.Min(1.0, targetW / (double)snap.PixelWidth);
+            BitmapSource src = scale < 1.0
+                ? new TransformedBitmap(snap, new System.Windows.Media.ScaleTransform(scale, scale))
+                : snap;
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(src));
+            using var ms = new System.IO.MemoryStream();
+            encoder.Save(ms);
+            return ms.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private void ShowHint(string text, double seconds = 1.3)
     {

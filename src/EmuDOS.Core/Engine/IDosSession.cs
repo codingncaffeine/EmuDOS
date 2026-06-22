@@ -30,11 +30,12 @@ public interface IDosSession : IDisposable
     /// <summary>Stop emulation. The session is finished afterwards and should be disposed.</summary>
     void Stop();
 
-    /// <summary>Write a save state to the given slot. Returns false if unsupported or it failed.</summary>
-    bool SaveState(int slot);
+    /// <summary>Serialize the current machine state, or null if unsupported/failed. The caller owns
+    /// where it's stored (see <c>SaveStateStore</c>).</summary>
+    byte[]? SaveStateBytes();
 
-    /// <summary>Load a save state from the given slot. Returns false if unsupported or it failed.</summary>
-    bool LoadState(int slot);
+    /// <summary>Restore machine state from bytes. Returns false if unsupported or it failed.</summary>
+    bool LoadStateBytes(byte[] data);
 
     /// <summary>Diagnostic snapshot of input polling (which devices the core queried). For debugging.</summary>
     string InputDiagnostics => string.Empty;
