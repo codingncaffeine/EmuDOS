@@ -247,6 +247,7 @@ public sealed class DosBoxPureSession : IDosSession
     // game polling the keyboard in a tight loop (copy-protection screens) can't miss a quick tap.
     private void PollInput()
     {
+        _gamepad.Poll(); // latch a controller snapshot once per frame (read by QueryInput's joypad case)
         _mouse = _host.Input.PollMouse();
 
         while (_host.Input.TryDequeueKey(out var key))
@@ -277,6 +278,7 @@ public sealed class DosBoxPureSession : IDosSession
             }
     }
 
+    private readonly Input.XInputController _gamepad = new();
     private readonly Audio.MidiMonitor _midi = new();
     private Audio.Mt32Synth? _synth;
     private short[] _mt32Buf = [];
@@ -323,7 +325,10 @@ public sealed class DosBoxPureSession : IDosSession
             DeviceKeyboard => _host.Input.IsKeyDown((DosKey)id)
                 ? Hit()
                 : (short)0,
-            DeviceJoypad => _host.Input.IsButtonDown((int)port, (PadButton)id) ? (short)1 : (short)0,
+            DeviceJoypad => _gamepad.IsButtonDown((int)port, (PadButton)id)
+                            || _host.Input.IsButtonDown((int)port, (PadButton)id)
+                ? (short)1
+                : (short)0,
             DeviceMouse => id switch
         {
             MouseX => (short)_mouse.X,
