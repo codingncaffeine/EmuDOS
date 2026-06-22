@@ -36,5 +36,9 @@ public partial class App : Application
 
         // Backfill covers for anything already on the shelf without one.
         await viewModel.FetchMissingArtAsync();
+
+        // Backfill descriptive metadata in the background (it's just text) so cards are pre-populated
+        // and the user never waits on a fetch when opening one.
+        _ = viewModel.FetchMissingMetadataAsync();
     }
 }

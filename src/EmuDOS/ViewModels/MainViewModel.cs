@@ -442,6 +442,13 @@ public sealed partial class MainViewModel : ObservableObject
         ClearStatus();
     }
 
+    /// <summary>Background backfill of descriptive metadata (genre/year/developer/description) for the
+    /// whole library, so the game card is already populated when opened — the user never waits on it.
+    /// Silent, off the UI thread, throttled to the ScreenScraper thread allowance. Per-game work is a
+    /// no-op when metadata already exists (gamebox or cache), so it's cheap to run over everything.</summary>
+    public Task FetchMissingMetadataAsync() =>
+        RunArtBatchAsync(Games.ToList(), EnsureMetadataAsync, static () => { });
+
     /// <summary>Run an art-fetch action over many games concurrently, capped to the ScreenScraper
     /// account's allowed thread count (1 for free/anonymous — so it stays sequential there).</summary>
     private async Task RunArtBatchAsync(
