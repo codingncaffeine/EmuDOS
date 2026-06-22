@@ -42,7 +42,7 @@ public class ScreenScraperMatchDiagnostics
                 var md = await client.FetchMetadataAsync(g);
                 result = md is null
                     ? "NO MATCH"
-                    : $"OK    year={md.Year}  dev={md.Developer ?? md.Publisher}  genre={md.Genre}";
+                    : $"OK    name=\"{md.Name}\"  year={md.Year}  dev={md.Developer ?? md.Publisher}";
             }
             catch (Exception ex)
             {

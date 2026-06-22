@@ -10,7 +10,7 @@ namespace EmuDOS.ViewModels;
 /// <summary>A single game on the shelf, with its box cover (once available).</summary>
 public sealed partial class GameTile : ObservableObject
 {
-    private readonly LibraryGame _game;
+    private LibraryGame _game;
     private bool _prefer3D;
 
     [ObservableProperty]
@@ -58,6 +58,14 @@ public sealed partial class GameTile : ObservableObject
     public string Title => _game.Title;
 
     public LibraryGame Game => _game;
+
+    /// <summary>Adopt a refreshed library row (e.g. after a ScreenScraper-driven rename) and update
+    /// the displayed title in place — no cover reload, no loss of selection.</summary>
+    public void RefreshFrom(LibraryGame game)
+    {
+        _game = game;
+        OnPropertyChanged(nameof(Title));
+    }
 
     /// <summary>Uniform box height — all boxes share this so their bottoms rest on one shelf line.</summary>
     public double BoxHeight => 132;

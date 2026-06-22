@@ -82,7 +82,14 @@ public sealed partial class ScreenScraperClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
         var jeu = await ResolveJeuAsync(gameName, cancellationToken);
-        return jeu is null ? null : ExtractMetadataFromJeu(jeu);
+        if (jeu is null)
+            return null;
+        var md = ExtractMetadataFromJeu(jeu);
+        // Only expose the canonical Name for an auto-rename when we're confident it's the SAME game
+        // (close name + compatible sequel number), so a fuzzy/wrong-sequel match can't rename a title.
+        if (md is not null && md.Name is not null && !IsConfidentRename(gameName, md.Name))
+            md = md with { Name = null };
+        return md;
     }
 
     private static EmuDOS.Core.Model.GameMetadata? ExtractMetadataFromJeu(JsonNode jeu)
@@ -101,8 +108,11 @@ public sealed partial class ScreenScraperClient
 
         var description = PickRegional(jeu["synopsis"]?.AsArray(), "text", ["en", "us", "wor"], langField: "langue");
 
+        var name = PickRegional(jeu["noms"]?.AsArray(), "text", ["us", "wor", "world", "eu", "ss"]);
+
         var md = new EmuDOS.Core.Model.GameMetadata
         {
+            Name = Nz(name),
             Year = Nz(year),
             Developer = Nz(developer),
             Publisher = Nz(publisher),
@@ -234,7 +244,10 @@ public sealed partial class ScreenScraperClient
                         continue;
                     foreach (var nom in GameNames(jeu))
                     {
-                        var score = NameScore(wanted, NormalizeForCompare(nom));
+                        var norm = NormalizeForCompare(nom);
+                        var score = NameScore(wanted, norm);
+                        if (!NumbersCompatible(LastNumber(wanted), LastNumber(norm)))
+                            score *= 0.4; // wrong sequel number — a different game in the series
                         if (score > bestScore) { bestScore = score; bestId = id; }
                     }
                 }
@@ -287,6 +300,33 @@ public sealed partial class ScreenScraperClient
         double prefixScore = (double)prefix / Math.Min(a.Length, b.Length);
         double editScore = 1.0 - (double)Levenshtein(a, b) / Math.Max(a.Length, b.Length);
         return Math.Max(prefixScore, editScore);
+    }
+
+    // Trailing sequel number of a normalized name ("policequest2thevengeance" -> "2"), or null.
+    private static string? LastNumber(string normalized)
+    {
+        var m = Regex.Matches(normalized, @"\d+");
+        return m.Count > 0 ? m[^1].Value : null;
+    }
+
+    // Numbers match (or both absent), or one side is unnumbered and the other is the first game ("1")
+    // — first games are commonly catalogued without a "1".
+    private static bool NumbersCompatible(string? a, string? b)
+    {
+        if (a == b)
+            return true;
+        return (a is null && b == "1") || (b is null && a == "1");
+    }
+
+    // Safe to auto-adopt ScreenScraper's name: a close match AND a compatible sequel number, so a
+    // fuzzy or wrong-sequel hit ("Police Quest 1" -> "Police Quest 2") never renames the game.
+    private static bool IsConfidentRename(string wanted, string canonical)
+    {
+        var a = NormalizeForCompare(wanted);
+        var b = NormalizeForCompare(canonical);
+        return a.Length > 0 && b.Length > 0
+            && NumbersCompatible(LastNumber(a), LastNumber(b))
+            && NameScore(a, b) >= 0.85;
     }
 
     private static int Levenshtein(string a, string b)

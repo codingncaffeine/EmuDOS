@@ -400,9 +400,30 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 _services.Store.WriteMetadata(root, md);
                 _services.ArtCache.StashMetadata(tile.Title, Path.Combine(root, "metadata.json"));
+                AdoptCanonicalName(tile, root, md.Name);
             }
         }
         catch { /* metadata is a convenience; never block on it */ }
+    }
+
+    // Auto-correct the game's title to ScreenScraper's canonical name when it differs (the gamebox
+    // profile is the source of truth), turning ugly imported names into proper ones. The DB upsert +
+    // tile refresh run on the UI thread so concurrent backfill renames don't contend on the index.
+    private void AdoptCanonicalName(GameTile tile, string root, string? canonical)
+    {
+        if (string.IsNullOrWhiteSpace(canonical) || string.Equals(tile.Title, canonical, StringComparison.Ordinal))
+            return;
+        try
+        {
+            var profile = _services.Store.ReadProfile(root);
+            _services.Store.WriteProfile(root, profile with { Title = canonical });
+            OnUI(() =>
+            {
+                var updated = _services.Library.UpsertFromGamebox(root);
+                tile.RefreshFrom(updated);
+            });
+        }
+        catch { /* rename is best-effort; the metadata still landed */ }
     }
 
     public async Task FetchMissingArtAsync()
