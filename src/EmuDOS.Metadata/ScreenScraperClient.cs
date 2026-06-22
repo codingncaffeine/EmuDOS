@@ -233,16 +233,68 @@ public sealed partial class ScreenScraperClient
         return medias is null ? null : pick(medias);
     }
 
-    /// <summary>Original title, then a variant with collection/episode noise stripped.</summary>
+    /// <summary>Title-match candidates for ScreenScraper, most-specific first: the exact title, then
+    /// the title with import noise stripped (years, region/publisher parentheses, [tags], version
+    /// numbers — e.g. "Champions of Krynn v1.2 [a1] (1990)(SSI) [RPG]" → "Champions of Krynn"), then
+    /// that with episode/collection words removed too. Distinct, non-empty.</summary>
     private static IEnumerable<string> NameCandidates(string name)
     {
-        yield return name;
-        var cleaned = CleanTitle(name);
-        if (!string.IsNullOrWhiteSpace(cleaned)
-            && !cleaned.Equals(name, StringComparison.OrdinalIgnoreCase))
+        var bare = StripNoise(name);
+        var candidates = new[]
         {
-            yield return cleaned;
+            name,                                   // exact
+            bare,                                    // noise stripped
+            SwapNumeralStyle(bare, toRoman: true),   // "Dungeon Master 2" -> "II"
+            SwapNumeralStyle(bare, toRoman: false),  // "Dungeon Master II" -> "2"
+            BaseTitle(bare),                         // "Carmageddon - High Octane" -> "Carmageddon"
+            CleanTitle(bare),                        // episode/collection words removed
+        };
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates)
+        {
+            var t = candidate.Trim().Trim('-', ':', '–', ',').Trim();
+            if (t.Length >= 2 && seen.Add(t))
+                yield return t;
         }
+    }
+
+    // The base game title before an edition/subtitle separator (" - " or ": "), e.g. an edition like
+    // "Carmageddon - High Octane" that ScreenScraper only lists under the base name "Carmageddon".
+    private static string BaseTitle(string name)
+    {
+        var parts = SubtitleRegex().Split(name);
+        return parts.Length > 1 && parts[0].Trim().Length >= 3 ? parts[0].Trim() : name;
+    }
+
+    // ScreenScraper's fuzzy matcher doesn't bridge Arabic<->Roman sequel numerals, so we try both.
+    private static readonly Dictionary<string, string> ArabicToRoman = new()
+    {
+        ["1"] = "I", ["2"] = "II", ["3"] = "III", ["4"] = "IV", ["5"] = "V",
+        ["6"] = "VI", ["7"] = "VII", ["8"] = "VIII", ["9"] = "IX", ["10"] = "X",
+    };
+    private static readonly Dictionary<string, string> RomanToArabic = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["i"] = "1", ["ii"] = "2", ["iii"] = "3", ["iv"] = "4", ["v"] = "5",
+        ["vi"] = "6", ["vii"] = "7", ["viii"] = "8", ["ix"] = "9", ["x"] = "10",
+    };
+
+    private static string SwapNumeralStyle(string input, bool toRoman) => toRoman
+        ? Regex.Replace(input, @"\b(10|[1-9])\b",
+            m => ArabicToRoman.TryGetValue(m.Value, out var r) ? r : m.Value)
+        : Regex.Replace(input, @"\b(viii|vii|iii|ix|iv|vi|ii|x|v|i)\b",
+            m => RomanToArabic.TryGetValue(m.Value, out var a) ? a : m.Value, RegexOptions.IgnoreCase);
+
+    // Remove (...) and [...] groups (years, regions, publishers, dump flags — including nested ones)
+    // and version tokens; the remaining bare title is what ScreenScraper matches best.
+    private static string StripNoise(string name)
+    {
+        var s = name;
+        for (int i = 0; i < 4 && ParenBracketRegex().IsMatch(s); i++)
+            s = ParenBracketRegex().Replace(s, " ");
+        s = VersionRegex().Replace(s, " ");
+        s = Regex.Replace(s, @"\s+", " ").Trim().Trim('-', ':', '–', ',', '.').Trim();
+        return s;
     }
 
     private static string CleanTitle(string name)
@@ -351,4 +403,16 @@ public sealed partial class ScreenScraperClient
 
     [GeneratedRegex(@"\b(trilogy|collection|anthology|compilation|edition|series)\b", RegexOptions.IgnoreCase)]
     private static partial Regex CollectionWordRegex();
+
+    // (...) and [...] groups — years, regions, publishers, dump/version flags.
+    [GeneratedRegex(@"\([^()]*\)|\[[^\[\]]*\]")]
+    private static partial Regex ParenBracketRegex();
+
+    // Version tokens like v1.2, 1.021, 475.01.
+    [GeneratedRegex(@"\bv?\d+(\.\d+)+\b", RegexOptions.IgnoreCase)]
+    private static partial Regex VersionRegex();
+
+    // An edition/subtitle separator: " - ", " – ", or " : ".
+    [GeneratedRegex(@"\s+[-–:]\s+")]
+    private static partial Regex SubtitleRegex();
 }
