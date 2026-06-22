@@ -112,6 +112,10 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 else
                 {
                     (classification, chosen) = Classify(executables, title);
+                    // Follow a hardcoded-path launcher .bat to the real exe (eXoDOS-style shims that
+                    // assume a fixed install path which breaks once imported into a subfolder).
+                    if (chosen is not null)
+                        chosen = DosExecutables.ResolveBatRedirect(box.ContentDir, chosen);
                     profile = new GameProfile
                     {
                         Title = title,

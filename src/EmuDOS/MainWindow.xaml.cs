@@ -227,6 +227,14 @@ public partial class MainWindow : Window
     /// game engine dwarfs config/registration helpers) — skipping installers and setup tools.</summary>
     private static string? BestGameExecutable(string contentDir, string title)
     {
+        var pick = BestGameExecutableCore(contentDir, title);
+        // Follow a hardcoded-path launcher .bat to the real exe, so packaged games whose .bat assumes
+        // a fixed install path still launch in one click.
+        return pick is null ? null : DosExecutables.ResolveBatRedirect(contentDir, pick);
+    }
+
+    private static string? BestGameExecutableCore(string contentDir, string title)
+    {
         var candidates = ScanExecutables(contentDir)
             .Where(e => !IsSetupLike(e) && !DosExecutables.IsRuntimeHelper(e))
             .ToList();

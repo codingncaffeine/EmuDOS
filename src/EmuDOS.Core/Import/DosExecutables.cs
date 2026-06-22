@@ -25,6 +25,62 @@ public static class DosExecutables
     private static readonly string[] UtilityMarkers =
         ["wizard", "prep", "patch", "uninst", "regist", "order", "help", "readme", "manual", "demo"];
 
+    /// <summary>
+    /// Follow a launcher <c>.bat</c> that just runs an exe by a hardcoded path to the real exe in the
+    /// content, when that path doesn't resolve (common in packaged/eXoDOS games whose .bat assumes a
+    /// fixed install drive/folder like <c>C:\TOMBRAID\TOMB.EXE</c>, which breaks once the game is
+    /// imported into a subfolder). Returns the content-relative path of the real exe, or the original
+    /// path unchanged when the .bat isn't a broken redirector (its target resolves, it does real
+    /// SET/PATH/MOUNT setup, or the exe can't be found). Lets such games launch with no manual fixup.
+    /// </summary>
+    public static string ResolveBatRedirect(string contentDir, string relPath)
+    {
+        if (string.IsNullOrEmpty(relPath) || !relPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+            return relPath;
+        try
+        {
+            var lines = File.ReadLines(Path.Combine(contentDir, relPath))
+                .Select(l => l.Trim().TrimStart('@').Trim())
+                .Where(l => l.Length > 0
+                         && !l.StartsWith("echo", StringComparison.OrdinalIgnoreCase)
+                         && !l.StartsWith("rem", StringComparison.OrdinalIgnoreCase)
+                         && !l.StartsWith("::"))
+                .ToList();
+
+            // A .bat that sets up the environment or mounts is a genuine launcher — leave it alone.
+            if (lines.Any(l => l.StartsWith("set ", StringComparison.OrdinalIgnoreCase)
+                            || l.StartsWith("path ", StringComparison.OrdinalIgnoreCase)
+                            || l.Contains("mount", StringComparison.OrdinalIgnoreCase)))
+                return relPath;
+
+            var target = lines.Select(ExeToken).FirstOrDefault(t => t is not null);
+            if (target is null)
+                return relPath;
+
+            var dosPath = target.Replace('/', '\\').TrimStart('\\');
+            if (dosPath.Length > 1 && dosPath[1] == ':')   // strip a drive letter (C:\…)
+                dosPath = dosPath[2..].TrimStart('\\');
+
+            if (File.Exists(Path.Combine(contentDir, dosPath)))
+                return relPath; // the hardcoded path is valid here — the .bat is fine
+
+            var realExe = Directory
+                .EnumerateFiles(contentDir, Path.GetFileName(dosPath), SearchOption.AllDirectories)
+                .FirstOrDefault();
+            return realExe is null ? relPath : Path.GetRelativePath(contentDir, realExe).Replace('/', '\\');
+        }
+        catch
+        {
+            return relPath;
+        }
+    }
+
+    // The first .exe/.com token on a line (ignoring args / leading commands like CALL).
+    private static string? ExeToken(string line) =>
+        line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(t => t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                              || t.EndsWith(".com", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>A DOS extender (the game's .bat launcher runs it; it's never the launch target).</summary>
     public static bool IsExtender(string path) => Extenders.Contains(Stem(path));
 
