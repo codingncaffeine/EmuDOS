@@ -62,8 +62,27 @@ public partial class GameDetailWindow : Window
 
         if (_services.Store.ReadMetadata(_tile.Game.GameboxPath) is { } md)
             PopulateMetadata(md);
+        else
+            _ = LoadMetadataAsync();
 
         _ = LoadSnapAsync();
+    }
+
+    // Fetch descriptive metadata on demand (for games imported before metadata existed) and show it
+    // under the title; stored as the gamebox metadata.json + cached so it survives delete/re-import.
+    private async Task LoadMetadataAsync()
+    {
+        try
+        {
+            var md = await _services.Art.FetchMetadataAsync(_tile.Title);
+            if (md is null || _closed)
+                return;
+            var root = _tile.Game.GameboxPath;
+            _services.Store.WriteMetadata(root, md);
+            _services.ArtCache.StashMetadata(_tile.Title, Path.Combine(root, "metadata.json"));
+            PopulateMetadata(md);
+        }
+        catch { /* leave the meta pills empty */ }
     }
 
     private void PopulateStats(LibraryGame g)
