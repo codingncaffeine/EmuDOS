@@ -82,6 +82,83 @@ public sealed partial class ScreenScraperClient
     }
 
     /// <summary>
+    /// Fetch descriptive metadata (year, developer, publisher, genre, synopsis) for a DOS game,
+    /// reusing the same <c>jeuInfos.php</c> endpoint the art path calls. Null if nothing matched.
+    /// </summary>
+    public async Task<EmuDOS.Core.Model.GameMetadata?> FetchMetadataAsync(
+        string gameName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+
+        foreach (var candidate in NameCandidates(gameName))
+        {
+            var url = $"{BaseUrl}jeuInfos.php?{Auth()}&systemeid={DosSystemId}&romnom={Esc(candidate)}";
+            using var response = await _http.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                continue;
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (ExtractMetadata(body) is { } md)
+                return md;
+        }
+
+        return null;
+    }
+
+    private static EmuDOS.Core.Model.GameMetadata? ExtractMetadata(string json)
+    {
+        JsonNode? doc;
+        try { doc = JsonNode.Parse(json); }
+        catch { return null; }
+
+        var jeu = doc?["response"]?["jeu"];
+        if (jeu is null)
+            return null;
+
+        var year = PickRegional(jeu["dates"]?.AsArray(), "text", ["us", "wor", "ss", "eu", "jp"]);
+        if (!string.IsNullOrEmpty(year) && year.Length >= 4 && int.TryParse(year[..4], out _))
+            year = year[..4];
+
+        var developer = jeu["developpeur"]?["text"]?.GetValue<string>();
+        var publisher = jeu["editeur"]?["text"]?.GetValue<string>();
+
+        string? genre = null;
+        var genres = jeu["genres"]?.AsArray();
+        if (genres is { Count: > 0 })
+            genre = PickRegional(genres[0]?["noms"]?.AsArray(), "text", ["en", "us", "wor"], langField: "langue");
+
+        var description = PickRegional(jeu["synopsis"]?.AsArray(), "text", ["en", "us", "wor"], langField: "langue");
+
+        var md = new EmuDOS.Core.Model.GameMetadata
+        {
+            Year = Nz(year),
+            Developer = Nz(developer),
+            Publisher = Nz(publisher),
+            Genre = Nz(genre),
+            Description = Nz(description),
+        };
+        return md.IsEmpty ? null : md;
+    }
+
+    // Walk a ScreenScraper regional array, preferring entries whose region/langue matches one of
+    // the preferred values; fall back to the first non-empty text.
+    private static string? PickRegional(JsonArray? arr, string textField, string[] preferred, string langField = "region")
+    {
+        if (arr is null || arr.Count == 0)
+            return null;
+        foreach (var pref in preferred)
+            foreach (var entry in arr)
+                if (string.Equals(entry?[langField]?.GetValue<string>(), pref, StringComparison.OrdinalIgnoreCase)
+                    && entry?[textField]?.GetValue<string>() is { Length: > 0 } text)
+                    return text;
+        foreach (var entry in arr)
+            if (entry?[textField]?.GetValue<string>() is { Length: > 0 } text)
+                return text;
+        return null;
+    }
+
+    private static string? Nz(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>
     /// Verify the configured user login (with the dev creds) via <c>ssuserInfos.php</c>.
     /// Returns whether the account is recognised and its <c>maxthreads</c> allowance — the number
     /// of concurrent API requests the account may make (paid tiers get more; free/anonymous = 1).

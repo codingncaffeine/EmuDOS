@@ -303,6 +303,7 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var tile in tiles.ToList())
         {
             _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath); // safety net
+            _services.ArtCache.StashMetadata(tile.Title, Path.Combine(tile.Game.GameboxPath, "metadata.json"));
             try { _services.Library.Remove(tile.Id); }
             catch { /* keep going */ }
             try
@@ -374,11 +375,34 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 Report($"No art found for {tile.Title}.", busy: false);
             }
+            await EnsureMetadataAsync(tile);
         }
         catch (Exception ex)
         {
             Report($"Art fetch failed: {ex.Message}", busy: false);
         }
+    }
+
+    // Ensure descriptive metadata exists: reuse the gamebox's, else the retained cache, else fetch
+    // from ScreenScraper. Stored as the gamebox metadata.json (truth) + cached so it survives delete.
+    // Off the UI thread; never touches UI.
+    private async Task EnsureMetadataAsync(GameTile tile)
+    {
+        try
+        {
+            var root = tile.Game.GameboxPath;
+            if (_services.Store.ReadMetadata(root) is not null)
+                return;
+            if (_services.ArtCache.TryRestoreMetadata(tile.Title, root))
+                return;
+            var md = await _services.Art.FetchMetadataAsync(tile.Title);
+            if (md is not null && !md.IsEmpty)
+            {
+                _services.Store.WriteMetadata(root, md);
+                _services.ArtCache.StashMetadata(tile.Title, Path.Combine(root, "metadata.json"));
+            }
+        }
+        catch { /* metadata is a convenience; never block on it */ }
     }
 
     public async Task FetchMissingArtAsync()
@@ -407,6 +431,7 @@ public sealed partial class MainViewModel : ObservableObject
                 _services.ArtCache.Stash(tile.Title, tile.BoxFrontPath);
                 OnUI(tile.LoadCover);
             }
+            await EnsureMetadataAsync(tile);
         }, () =>
         {
             var n = Interlocked.Increment(ref done);

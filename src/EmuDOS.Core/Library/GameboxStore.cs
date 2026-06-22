@@ -38,6 +38,32 @@ public sealed class GameboxStore
         JsonSerializer.Serialize(stream, profile, JsonOptions);
     }
 
+    /// <summary>Descriptive metadata for the game card, or null if none has been fetched yet.</summary>
+    public GameMetadata? ReadMetadata(string gameboxRoot)
+    {
+        var box = new Gamebox(gameboxRoot);
+        if (!File.Exists(box.MetadataPath))
+            return null;
+        try
+        {
+            using var stream = File.OpenRead(box.MetadataPath);
+            return JsonSerializer.Deserialize<GameMetadata>(stream, JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public void WriteMetadata(string gameboxRoot, GameMetadata metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        var box = new Gamebox(gameboxRoot);
+        Directory.CreateDirectory(box.Root);
+        using var stream = File.Create(box.MetadataPath);
+        JsonSerializer.Serialize(stream, metadata, JsonOptions);
+    }
+
     /// <summary>Resolve a gamebox into a runnable instance, ensuring its content/saves dirs exist.</summary>
     public GameInstance Resolve(string gameboxRoot)
     {

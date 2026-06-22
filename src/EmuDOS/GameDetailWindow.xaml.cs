@@ -4,7 +4,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using EmuDOS.Core.Library;
+using EmuDOS.Core.Model;
 using EmuDOS.Services;
 using EmuDOS.ViewModels;
 
@@ -43,6 +45,57 @@ public partial class GameDetailWindow : Window
         _isFavorite = g.IsFavorite;
         UpdateFavButton();
         StatsText.Text = BuildStats(g);
+
+        if (_services.Store.ReadMetadata(_tile.Game.GameboxPath) is { } md)
+            PopulateMetadata(md);
+    }
+
+    private void PopulateMetadata(GameMetadata md)
+    {
+        AddMetaLine("Genre", md.Genre);
+        AddMetaLine("Year", md.Year);
+        AddMetaLine("Developer", md.Developer);
+        AddMetaLine("Publisher", md.Publisher);
+
+        if (!string.IsNullOrWhiteSpace(md.Description))
+        {
+            BodyPanel.Children.Add(new TextBlock
+            {
+                Text = "Description",
+                Foreground = (Brush)FindResource("TextSecondary"),
+                FontSize = 11,
+                Margin = new Thickness(0, 14, 0, 3),
+            });
+            BodyPanel.Children.Add(new TextBlock
+            {
+                Text = md.Description,
+                Foreground = (Brush)FindResource("TextPrimary"),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private void AddMetaLine(string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 5) };
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            Foreground = (Brush)FindResource("TextSecondary"),
+            FontSize = 12,
+            Width = 86,
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = value,
+            Foreground = (Brush)FindResource("TextPrimary"),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        BodyPanel.Children.Add(row);
     }
 
     private static string BuildStats(LibraryGame g)

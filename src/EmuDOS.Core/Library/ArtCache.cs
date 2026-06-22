@@ -48,6 +48,35 @@ public sealed class ArtCache
         }
     }
 
+    /// <summary>Copy a gamebox's metadata.json into the cache (no-op if absent), so descriptive
+    /// metadata survives deleting the game and is reused on re-import.</summary>
+    public void StashMetadata(string title, string metadataFile)
+    {
+        if (string.IsNullOrWhiteSpace(title) || !File.Exists(metadataFile))
+            return;
+        try { File.Copy(metadataFile, MetaPathFor(title), overwrite: true); }
+        catch { /* caching is best-effort */ }
+    }
+
+    /// <summary>Restore cached metadata.json into a gamebox. Returns true if it was placed.</summary>
+    public bool TryRestoreMetadata(string title, string gameboxRoot)
+    {
+        var cached = MetaPathFor(title);
+        if (!File.Exists(cached))
+            return false;
+        try
+        {
+            File.Copy(cached, new Gamebox(gameboxRoot).MetadataPath, overwrite: true);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private string MetaPathFor(string title) => Path.Combine(_dir, Key(title) + ".meta.json");
+
     private string PathFor(string title) => Path.Combine(_dir, Key(title) + ".png");
 
     private static string Key(string title)

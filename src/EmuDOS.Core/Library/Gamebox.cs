@@ -27,6 +27,9 @@ public sealed class Gamebox(string root)
     /// <summary>Free-form per-game notes (plain text/markdown), travels with the gamebox.</summary>
     public string NotesPath => Path.Combine(Root, "notes.md");
 
+    /// <summary>Descriptive metadata (genre, year, developer, …) as JSON; shown on the game card.</summary>
+    public string MetadataPath => Path.Combine(Root, "metadata.json");
+
     /// <summary>Save data and save states.</summary>
     public string SavesDir => Path.Combine(Root, "saves");
 

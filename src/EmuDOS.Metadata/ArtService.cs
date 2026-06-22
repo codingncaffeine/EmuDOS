@@ -49,6 +49,10 @@ public sealed class ArtService(ScreenScraperClient screenScraper, SteamGridDbCli
         return path;
     }
 
+    /// <summary>Fetch descriptive metadata (genre, year, developer, …) from ScreenScraper, or null.</summary>
+    public Task<Core.Model.GameMetadata?> FetchMetadataAsync(string gameName, CancellationToken cancellationToken = default)
+        => screenScraper.FetchMetadataAsync(gameName, cancellationToken);
+
     private async Task<byte[]?> FromScreenScraperAsync(string gameName, CancellationToken cancellationToken)
     {
         var url = await screenScraper.FindBoxArtUrlAsync(gameName, cancellationToken);
