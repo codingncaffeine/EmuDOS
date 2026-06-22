@@ -843,6 +843,11 @@ public partial class MainWindow : Window
                 services.Store.WriteState(tile.Game.GameboxPath, state.WithExecutable(executableOverride));
         }
 
+        // Folder games write in-game saves into content/; snapshot a baseline (if none yet) before
+        // play so the Manage window and sync can tell saves from the original game files.
+        if (instance.Profile.SourceMedia != EmuDOS.Core.Model.SourceMediaType.Iso)
+            EmuDOS.Core.Library.ContentBaseline.CaptureIfMissing(instance.ContentPath, instance.SavePath);
+
         var engine = new DosBoxPureEngine(
             services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir);
         services.Library.RecordPlay(tile.Id);

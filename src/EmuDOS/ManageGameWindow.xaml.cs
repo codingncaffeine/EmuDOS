@@ -61,15 +61,41 @@ public partial class ManageGameWindow : Window
         Bind(ShotsList, ShotsEmpty, FileRows(_box.ScreenshotsDir, "*.png", thumb: true));
         Bind(VideosList, VideosEmpty, FileRows(_box.VideosDir, "*.mp4", thumb: false));
 
-        // In-game saves: the save folder's contents minus the save-state artifacts (shown above).
-        var saves = !Directory.Exists(_box.SavesDir)
-            ? new List<Row>()
-            : Directory.EnumerateFiles(_box.SavesDir)
-                .Where(f => !System.IO.Path.GetFileName(f).StartsWith("state_", StringComparison.OrdinalIgnoreCase))
+        Bind(SavesList, SavesEmpty, LoadInGameSaves());
+    }
+
+    // In-game saves differ by game type: Iso games persist to a *.pure.zip in saves/; folder games
+    // write in place into content/, so we show what changed since the import baseline.
+    private List<Row> LoadInGameSaves()
+    {
+        var hasPureZip = Directory.Exists(_box.SavesDir) &&
+                         Directory.EnumerateFiles(_box.SavesDir, "*.pure.zip").Any();
+        if (hasPureZip)
+        {
+            return Directory.EnumerateFiles(_box.SavesDir)
+                .Where(f => System.IO.Path.GetFileName(f) is var n
+                            && !n.StartsWith("state_", StringComparison.OrdinalIgnoreCase)
+                            && !n.StartsWith('.'))
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .Select(f => RowForFile(f, thumb: false))
                 .ToList();
-        Bind(SavesList, SavesEmpty, saves);
+        }
+
+        // Folder game: ensure a baseline exists (so future saves are tracked), then show the diff.
+        ContentBaseline.CaptureIfMissing(_box.ContentDir, _box.SavesDir);
+        return ContentBaseline.DiffSaves(_box.ContentDir, _box.SavesDir)
+            .Select(rel =>
+            {
+                var full = System.IO.Path.Combine(_box.ContentDir, rel);
+                var fi = new FileInfo(full);
+                return new Row
+                {
+                    Primary = rel,
+                    Secondary = $"{FormatSize(fi.Length)} · {fi.LastWriteTime:g}",
+                    Path = full,
+                };
+            })
+            .ToList();
     }
 
     private static List<Row> FileRows(string dir, string pattern, bool thumb)
