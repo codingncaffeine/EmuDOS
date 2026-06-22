@@ -381,7 +381,7 @@ public partial class PreferencesWindow : Window
 
     // ── Cloud sync ─────────────────────────────────────────────────────────────────
     private EmuDOS.Metadata.GitHubSyncService? _gh;
-    private EmuDOS.Metadata.GitHubSyncService Gh => _gh ??= new EmuDOS.Metadata.GitHubSyncService();
+    private EmuDOS.Metadata.GitHubSyncService Gh => _gh ??= new EmuDOS.Metadata.GitHubSyncService(_services.CloudLog.Info);
 
     private void UpdateCloudUi()
     {
@@ -417,6 +417,7 @@ public partial class PreferencesWindow : Window
             _services.Settings.GitHubToken = token;
             _services.Settings.GitHubLogin = await Gh.GetLoginAsync(token) ?? "";
             _services.SettingsStore.Save(_services.Settings);
+            _services.CloudLog.Info($"Connected as {_services.Settings.GitHubLogin}.");
             UpdateCloudUi();
         }
         catch (System.Exception ex)
@@ -454,6 +455,7 @@ public partial class PreferencesWindow : Window
 
     private void OnDisconnect(object sender, RoutedEventArgs e)
     {
+        _services.CloudLog.Info("Disconnected.");
         _services.Settings.GitHubToken = string.Empty;
         _services.Settings.GitHubLogin = string.Empty;
         _services.SettingsStore.Save(_services.Settings);

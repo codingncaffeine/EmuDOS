@@ -35,6 +35,7 @@ public sealed class AppServices
         _screenScraperHttp.DefaultRequestHeaders.Add("User-Agent", "EmuDOS/1.0");
         SnapsLog = new AppLog(Paths, "snaps.log");
         SystemLog = new AppLog(Paths, "system.log");
+        CloudLog = new AppLog(Paths, "cloud-sync.log");
         Art = BuildArtService();
     }
 
@@ -43,6 +44,8 @@ public sealed class AppServices
     public AppLog SnapsLog { get; }
 
     public AppLog SystemLog { get; }
+
+    public AppLog CloudLog { get; }
 
     public UserSettings Settings { get; }
 

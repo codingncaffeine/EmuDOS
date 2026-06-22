@@ -34,6 +34,10 @@ public sealed class GitHubSyncService
     private const string Api = "https://api.github.com";
     private static readonly HttpClient Http = CreateClient();
 
+    private readonly Action<string> _log;
+
+    public GitHubSyncService(Action<string>? log = null) => _log = log ?? (_ => { });
+
     private static HttpClient CreateClient()
     {
         var c = new HttpClient();
@@ -57,7 +61,11 @@ public sealed class GitHubSyncService
         req.Headers.Accept.ParseAdd("application/json");
         using var resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
+        {
+            _log($"Device-code request failed: HTTP {(int)resp.StatusCode}");
             return null;
+        }
+        _log("Device code requested; awaiting authorization.");
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
         var r = doc.RootElement;
         return new GitHubDeviceCode(
@@ -91,13 +99,20 @@ public sealed class GitHubSyncService
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
             var r = doc.RootElement;
             if (r.TryGetProperty("access_token", out var tok))
+            {
+                _log("Authorized — access token received.");
                 return tok.GetString();
+            }
             var err = r.TryGetProperty("error", out var e) ? e.GetString() : null;
             if (err == "slow_down")
                 interval += 5;
             else if (err is not null and not "authorization_pending")
+            {
+                _log($"Authorization stopped: {err}");
                 return null; // expired_token / access_denied
+            }
         }
+        _log("Authorization timed out.");
         return null;
     }
 
@@ -117,16 +132,27 @@ public sealed class GitHubSyncService
         int up = 0, down = 0;
         try
         {
+            _log($"Sync started → {login}/{repo}.");
             progress?.Report("Connecting…");
             if (!await EnsureRepoAsync(token, login, repo, ct).ConfigureAwait(false))
+            {
+                _log("FAILED: could not access or create the sync repo.");
                 return new CloudSyncResult(0, 0, "Couldn't access or create the sync repo.");
+            }
 
             // Push the library database (gzip'd snapshot).
             if (File.Exists(dbPath))
             {
                 progress?.Report("Uploading library database…");
                 if (await PutAsync(token, login, repo, "db/library.db.gz", Gzip(File.ReadAllBytes(dbPath)), ct).ConfigureAwait(false))
+                {
                     up++;
+                    _log("Uploaded library database.");
+                }
+                else
+                {
+                    _log("WARN: library database upload failed.");
+                }
             }
 
             // Per-game push: state files (additive) + notes.
@@ -144,16 +170,22 @@ public sealed class GitHubSyncService
 
                 progress?.Report($"Syncing {name}…");
                 var remote = await ListNamesAsync(token, login, repo, $"saves/{name}", ct).ConfigureAwait(false);
+                int gameUp = 0;
                 foreach (var f in stateFiles)
                 {
                     if (remote.Contains(Path.GetFileName(f))) // additive: never overwrite an existing state
                         continue;
                     if (await PutAsync(token, login, repo, $"saves/{name}/{Path.GetFileName(f)}", File.ReadAllBytes(f), ct).ConfigureAwait(false))
-                        up++;
+                    { up++; gameUp++; }
+                    else
+                        _log($"WARN: upload failed for saves/{name}/{Path.GetFileName(f)}");
                 }
-                if (File.Exists(notes) &&
-                    await PutAsync(token, login, repo, $"notes/{name}.md", File.ReadAllBytes(notes), ct).ConfigureAwait(false))
+                bool notesUp = File.Exists(notes) &&
+                    await PutAsync(token, login, repo, $"notes/{name}.md", File.ReadAllBytes(notes), ct).ConfigureAwait(false);
+                if (notesUp)
                     up++;
+                if (gameUp > 0 || notesUp)
+                    _log($"Pushed {name}: {gameUp} state file(s){(notesUp ? " + notes" : "")}.");
             }
 
             // Per-game pull: state files and notes that exist in the repo but not locally (additive,
@@ -175,18 +207,22 @@ public sealed class GitHubSyncService
                     Directory.CreateDirectory(localSaves);
                     File.WriteAllBytes(local, bytes);
                     down++;
+                    _log($"Downloaded saves/{folder}/{fname}");
                 }
             }
 
+            _log($"Sync finished — {up} uploaded, {down} downloaded.");
             progress?.Report($"Done — {up} uploaded, {down} downloaded.");
             return new CloudSyncResult(up, down, null);
         }
         catch (OperationCanceledException)
         {
+            _log("Sync cancelled.");
             return new CloudSyncResult(up, down, "Cancelled.");
         }
         catch (Exception ex)
         {
+            _log($"Sync ERROR: {ex.Message}");
             return new CloudSyncResult(up, down, ex.Message);
         }
     }
