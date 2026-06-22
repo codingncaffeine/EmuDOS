@@ -238,7 +238,14 @@ public sealed partial class ScreenScraperClient
         // the right entry still wins.
         var bare = StripNoise(gameName);
         var terms = new List<string>();
-        foreach (var t in new[] { bare, DropTrailingNumber(bare), SwapNumeralStyle(bare, toRoman: true) })
+        foreach (var t in new[]
+                 {
+                     bare,
+                     EpisodeToNumber(bare),                              // "...Episode 3" -> "...3"
+                     DropTrailingNumber(bare),                          // series-wide search, score picks the entry
+                     SwapNumeralStyle(bare, toRoman: true),             // "...6" -> "...VI"
+                     SwapNumeralStyle(Possessive(bare), toRoman: true), // "Kings Quest 6" -> "King's Quest VI"
+                 })
             if (!string.IsNullOrWhiteSpace(t) && !terms.Contains(t, StringComparer.OrdinalIgnoreCase))
                 terms.Add(t);
 
@@ -303,7 +310,7 @@ public sealed partial class ScreenScraperClient
     // (café == cafe), alphanumerics only — so minor spelling/punctuation differences compare equal.
     private static string NormalizeForCompare(string name)
     {
-        var s = SwapNumeralStyle(StripNoise(name), toRoman: false).Replace("&", " and ").ToLowerInvariant();
+        var s = SwapNumeralStyle(EpisodeToNumber(StripNoise(name)), toRoman: false).Replace("&", " and ").ToLowerInvariant();
         s = new string(s.Normalize(System.Text.NormalizationForm.FormD)
             .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
                         != System.Globalization.UnicodeCategory.NonSpacingMark)
@@ -332,13 +339,16 @@ public sealed partial class ScreenScraperClient
         return m.Count > 0 ? m[^1].Value : null;
     }
 
-    // Numbers match (or both absent), or one side is unnumbered and the other is the first game ("1")
-    // — first games are commonly catalogued without a "1".
-    private static bool NumbersCompatible(string? a, string? b)
+    // Sequel-number agreement as a score multiplier: exact match (or both unnumbered) is best; an
+    // unnumbered side vs a "1" is the lenient first-game case (still good, but loses to an exact
+    // numbered match so "Keen 1" beats unnumbered "Keen: <other subtitle>"); anything else conflicts.
+    private static double NumberMultiplier(string? a, string? b)
     {
         if (a == b)
-            return true;
-        return (a is null && b == "1") || (b is null && a == "1");
+            return 1.0;
+        if ((a is null && b == "1") || (b is null && a == "1"))
+            return 0.9;
+        return 0.4;
     }
 
     // Safe to auto-adopt ScreenScraper's name: a close match AND a compatible sequel number, so a
@@ -361,9 +371,7 @@ public sealed partial class ScreenScraperClient
             var variant = NormalizeForCompare(raw);
             if (variant.Length == 0)
                 continue;
-            var score = NameScore(wantedNorm, variant);
-            if (!NumbersCompatible(LastNumber(wantedNorm), LastNumber(variant)))
-                score *= 0.4; // wrong sequel number — a different game in the series
+            var score = NameScore(wantedNorm, variant) * NumberMultiplier(LastNumber(wantedNorm), LastNumber(variant));
             if (score > best)
                 best = score;
         }
@@ -405,6 +413,9 @@ public sealed partial class ScreenScraperClient
             name,                                   // exact
             bare,                                    // noise stripped
             HyphensToSpaces(bare),                   // "Lotus-The-Ultimate-Challenge" -> spaces
+            EpisodeToNumber(bare),                   // "Commander Keen Episode 3" -> "Commander Keen 3"
+            Possessive(bare),                        // "Kings Quest 6" -> "King's Quest 6"
+            SwapNumeralStyle(Possessive(bare), toRoman: true), // "Kings Quest 6" -> "King's Quest VI"
             SwapNumeralStyle(bare, toRoman: true),   // "Dungeon Master 2" -> "II"
             SwapNumeralStyle(bare, toRoman: false),  // "Ishar II" -> "2"
             BaseTitle(bare),                         // "Carmageddon - High Octane" -> "Carmageddon"
@@ -475,6 +486,16 @@ public sealed partial class ScreenScraperClient
     // late, so true sequels still match their own numbered entry first.
     private static string DropTrailingNumber(string name) =>
         Regex.Replace(name, @"\s+\d{1,2}$", "");
+
+    // "Episode N" / "Part N" / "Disk N" -> just "N" (SS lists "Commander Keen Episode 3" as
+    // "Commander Keen 3"); keeps the number, drops the word.
+    private static string EpisodeToNumber(string name) =>
+        EpisodeNumRegex().Replace(name, "$1");
+
+    // Possessive apostrophe on the first word ("Kings Quest" -> "King's Quest") — SS's search needs it
+    // for series like King's Quest. A best-effort extra candidate; wrong guesses just don't match.
+    private static string Possessive(string name) =>
+        Regex.Replace(name, @"^(\w+)s\b", "$1's");
 
     private static string CleanTitle(string name)
     {
@@ -594,6 +615,10 @@ public sealed partial class ScreenScraperClient
     // An edition/subtitle separator: " - ", " – ", or " : ".
     [GeneratedRegex(@"\s+[-–:]\s+")]
     private static partial Regex SubtitleRegex();
+
+    // "Episode 3" / "Ep 3" / "Part 3" / "Disk 3" -> captures the number for EpisodeToNumber.
+    [GeneratedRegex(@"\b(?:episode|ep|chapter|part|disk|disc|volume|vol)\s*(\d+)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex EpisodeNumRegex();
 
     // Trailing platform/language tags left by some dumps ("... DOS EN").
     [GeneratedRegex(@"(\s+(dos|cd|en|eng|de|fr|es|usa|eur|world|wor))+$", RegexOptions.IgnoreCase)]

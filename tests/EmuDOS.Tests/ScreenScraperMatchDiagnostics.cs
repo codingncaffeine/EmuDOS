@@ -31,7 +31,7 @@ public class ScreenScraperMatchDiagnostics
         var settings = JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(settingsPath))!;
         _out.WriteLine($"login configured: {!string.IsNullOrWhiteSpace(settings.ScreenScraperUser)}");
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
         var client = new ScreenScraperClient(http, settings.ScreenScraperUser, settings.ScreenScraperPassword);
 
         foreach (var g in games)
