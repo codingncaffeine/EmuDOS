@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\EmuDOS.Core\EmuDOS.Core.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -37,6 +37,7 @@ public sealed class GitHubSyncService
 
     private readonly Action<string> _log;
     private byte[]? _encKey; // set per SyncAsync; non-null = encrypt uploads / decrypt downloads
+    private string _defaultBranch = "main"; // captured from the repo; used for recursive tree listing
 
     public GitHubSyncService(Action<string>? log = null) => _log = log ?? (_ => { });
 
@@ -180,7 +181,10 @@ public sealed class GitHubSyncService
                     ? Directory.EnumerateFiles(savesDir, "state_*").ToList()
                     : new List<string>();
                 var notes = Path.Combine(gameDir, "notes.md");
-                if (stateFiles.Count == 0 && !File.Exists(notes))
+                var contentDir = Path.Combine(gameDir, "content");
+                // In-game saves a folder game wrote in place (new/changed content since the import baseline).
+                var ingame = EmuDOS.Core.Library.ContentBaseline.DiffSaves(contentDir, savesDir);
+                if (stateFiles.Count == 0 && !File.Exists(notes) && ingame.Count == 0)
                     continue;
 
                 progress?.Report($"Syncing {name}…");
@@ -195,12 +199,27 @@ public sealed class GitHubSyncService
                     else
                         _log($"WARN: upload failed for saves/{name}/{Path.GetFileName(f)}");
                 }
+
+                // In-game saves overwrite their cloud copy (they change as you play).
+                int ingameUp = 0;
+                foreach (var rel in ingame)
+                {
+                    var full = Path.Combine(contentDir, rel.Replace('/', Path.DirectorySeparatorChar));
+                    if (!File.Exists(full))
+                        continue;
+                    var repoPath = $"ingame/{name}/{rel}";
+                    if (await PutAsync(token, login, repo, repoPath, Wrap(File.ReadAllBytes(full)), ct).ConfigureAwait(false))
+                    { up++; ingameUp++; }
+                    else
+                        _log($"WARN: upload failed for {repoPath}");
+                }
+
                 bool notesUp = File.Exists(notes) &&
                     await PutAsync(token, login, repo, $"notes/{name}.md", Wrap(File.ReadAllBytes(notes)), ct).ConfigureAwait(false);
                 if (notesUp)
                     up++;
-                if (gameUp > 0 || notesUp)
-                    _log($"Pushed {name}: {gameUp} state file(s){(notesUp ? " + notes" : "")}.");
+                if (gameUp > 0 || ingameUp > 0 || notesUp)
+                    _log($"Pushed {name}: {gameUp} state(s), {ingameUp} save(s){(notesUp ? " + notes" : "")}.");
             }
 
             // Per-game pull: state files and notes that exist in the repo but not locally (additive,
@@ -232,6 +251,37 @@ public sealed class GitHubSyncService
                 }
             }
 
+            // Pull in-game saves: ingame/{folder}/** into that game's content/, when missing locally.
+            foreach (var (path, sha) in await GetTreeAsync(token, login, repo, ct).ConfigureAwait(false))
+            {
+                if (!path.StartsWith("ingame/", StringComparison.Ordinal))
+                    continue;
+                var rest = path["ingame/".Length..];
+                var slash = rest.IndexOf('/');
+                if (slash <= 0)
+                    continue;
+                var folder = rest[..slash];
+                var rel = rest[(slash + 1)..];
+                if (!Directory.Exists(Path.Combine(gameboxesDir, folder)))
+                    continue; // game not installed here
+                var local = Path.Combine(gameboxesDir, folder, "content", rel.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(local))
+                    continue; // additive: don't clobber a local save with a possibly-older cloud copy
+                var bytes = await GetBlobAsync(token, login, repo, sha, ct).ConfigureAwait(false);
+                if (bytes is null)
+                    continue;
+                bytes = Unwrap(bytes);
+                if (bytes is null)
+                {
+                    _log($"Skipped (can't decrypt) {path}");
+                    continue;
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(local)!);
+                File.WriteAllBytes(local, bytes);
+                down++;
+                _log($"Downloaded {path}");
+            }
+
             _log($"Sync finished — {up} uploaded, {down} downloaded.");
             progress?.Report($"Done — {up} uploaded, {down} downloaded.");
             return new CloudSyncResult(up, down, null);
@@ -253,15 +303,52 @@ public sealed class GitHubSyncService
     }
 
     // ── GitHub REST helpers ───────────────────────────────────────────────────────────────
-    private static async Task<bool> EnsureRepoAsync(string token, string login, string repo, CancellationToken ct)
+    private async Task<bool> EnsureRepoAsync(string token, string login, string repo, CancellationToken ct)
     {
         using (var get = await SendAsync(HttpMethod.Get, $"{Api}/repos/{login}/{repo}", token, ct: ct).ConfigureAwait(false))
             if (get.IsSuccessStatusCode)
+            {
+                _defaultBranch = await ReadDefaultBranch(get, ct).ConfigureAwait(false);
                 return true;
+            }
 
         var body = JsonSerializer.Serialize(new { name = repo, @private = true, auto_init = true });
         using var create = await SendAsync(HttpMethod.Post, $"{Api}/user/repos", token, body, ct).ConfigureAwait(false);
-        return create.IsSuccessStatusCode;
+        if (!create.IsSuccessStatusCode)
+            return false;
+        _defaultBranch = await ReadDefaultBranch(create, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task<string> ReadDefaultBranch(HttpResponseMessage resp, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            return doc.RootElement.TryGetProperty("default_branch", out var b) ? b.GetString() ?? "main" : "main";
+        }
+        catch
+        {
+            return "main";
+        }
+    }
+
+    // All blob paths + shas in the repo, via the recursive Git tree (one call). Used to pull nested
+    // in-game saves. Empty if the tree can't be read.
+    private async Task<List<(string Path, string Sha)>> GetTreeAsync(string token, string login, string repo, CancellationToken ct)
+    {
+        var list = new List<(string, string)>();
+        using var resp = await SendAsync(HttpMethod.Get,
+            $"{Api}/repos/{login}/{repo}/git/trees/{_defaultBranch}?recursive=1", token, ct: ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            return list;
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        if (!doc.RootElement.TryGetProperty("tree", out var tree) || tree.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in tree.EnumerateArray())
+            if (item.TryGetProperty("type", out var t) && t.GetString() == "blob")
+                list.Add((item.GetProperty("path").GetString() ?? "", item.GetProperty("sha").GetString() ?? ""));
+        return list;
     }
 
     private static async Task<bool> PutAsync(string token, string login, string repo, string path, byte[] content, CancellationToken ct)
