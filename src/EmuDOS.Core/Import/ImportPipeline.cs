@@ -92,6 +92,9 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             }
             else
             {
+                // Convert an Alcohol .mds/.mdf image to a .cue up front (the .mdf is a raw track) so
+                // it's recognized as a disc by the checks below — dosbox can't read .mds/.mdf directly.
+                EnsureMountableCue(box.ContentDir);
                 executables = FindExecutables(box.ContentDir);
 
                 // A zip/folder that is essentially just a CD image (a disc image present, with no
@@ -127,18 +130,18 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 profile = resolver.Resolve(profile, contentFiles!);
             }
 
-            // A folder/zip game that ships a CD image inside it (e.g. a cd\*.cue) needs that disc
-            // mounted as D:, or it asks for "disk 1". Add the mount unless one is already present.
-            // Done after the resolver, whose curated launch can drop pre-commands.
-            // NOTE: the image is referenced via the C: drive path (c:\...), not a bare relative path:
-            // dosbox resolves a bare path against the host CWD, but c:\ traverses the mounted content.
-            // And it's -t cdrom (not -t iso) — the only type that registers MSCDEX and reads raw
-            // MODE1/2352 cue/bin correctly (and keeps CD audio).
+            // A folder/zip game with its own files PLUS a bundled CD image (e.g. a cd\*.cue) needs
+            // that disc mounted as D:, or it asks for "disk 1" / fails its CD check. Done after the
+            // resolver, whose curated launch can drop pre-commands.
+            // The disc is flattened to the content ROOT under a short, space-free name first: dosbox
+            // can't IMGMOUNT an image that's deeply nested or has a long/spaced name inside the
+            // union-mounted C:. We then mount via the C: drive path with -t cdrom (the only type that
+            // registers MSCDEX and reads raw MODE1/2352 cue/bin, keeping CD audio).
             if (discMount is null && profile.SourceMedia != SourceMediaType.Iso
-                && FindMountableDisc(box.ContentDir) is { } innerDisc
-                && !profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase)))
+                && !profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase))
+                && StageBundledDiscAtRoot(box.ContentDir) is { } rootDisc)
             {
-                var pre = new List<string> { $"IMGMOUNT D: \"c:\\{innerDisc}\" -t cdrom" };
+                var pre = new List<string> { $"IMGMOUNT D: \"c:\\{rootDisc}\" -t cdrom" };
                 pre.AddRange(profile.Launch.PreCommands);
                 profile = profile with { Launch = profile.Launch with { PreCommands = pre } };
             }
@@ -377,6 +380,83 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             .ThenBy(f => f, StringComparer.OrdinalIgnoreCase)
             .Select(f => Path.GetRelativePath(contentDir, f).Replace('/', '\\'))
             .FirstOrDefault();
+
+    // Write a .cue for any Alcohol .mdf image (a raw MODE1/2352 track) so it can be mounted —
+    // neither EmuDOS nor dosbox reads .mds/.mdf directly. The cue sits next to the .mdf.
+    private static void EnsureMountableCue(string contentDir)
+    {
+        foreach (var mdf in Directory.EnumerateFiles(contentDir, "*.mdf", SearchOption.AllDirectories).ToList())
+        {
+            var cue = Path.ChangeExtension(mdf, ".cue");
+            if (File.Exists(cue))
+                continue;
+            try
+            {
+                File.WriteAllText(cue,
+                    $"FILE \"{Path.GetFileName(mdf)}\" BINARY\r\n  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\n");
+            }
+            catch { /* leave it — just won't mount */ }
+        }
+    }
+
+    private static readonly string[] RootableDiscExts = [".cue", ".iso", ".chd"];
+
+    /// <summary>Flatten a folder game's bundled CD image to the content ROOT under a short, space-free
+    /// name and return the root mount target (e.g. "gamecd.cue"). dosbox can't IMGMOUNT an image that's
+    /// deeply nested or has a long/spaced name inside the union-mounted C:. For a .cue, its data tracks
+    /// are moved alongside and the cue's FILE lines rewritten to match. Null if there's no disc.</summary>
+    private static string? StageBundledDiscAtRoot(string contentDir)
+    {
+        var disc = Directory.EnumerateFiles(contentDir, "*", SearchOption.AllDirectories)
+            .Where(f => RootableDiscExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
+            .OrderBy(f => Array.IndexOf(RootableDiscExts, Path.GetExtension(f).ToLowerInvariant()))
+            .ThenBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (disc is null)
+            return null;
+        try
+        {
+            var ext = Path.GetExtension(disc).ToLowerInvariant();
+            if (ext != ".cue")
+                return MoveToRoot(disc, contentDir, "gamecd" + ext);
+
+            var cueDir = Path.GetDirectoryName(disc)!;
+            var cueText = File.ReadAllText(disc);
+            var bins = CueReferencedFiles(disc).ToList();
+            var n = 0;
+            foreach (var bin in bins)
+            {
+                var shortName = bins.Count == 1
+                    ? "gamecd" + Path.GetExtension(bin)
+                    : $"gamecd{++n:00}" + Path.GetExtension(bin);
+                var src = Path.Combine(cueDir, bin);
+                if (File.Exists(src))
+                    MoveToRoot(src, contentDir, shortName);
+                cueText = cueText.Replace('"' + bin + '"', '"' + shortName + '"');
+            }
+            var rootCue = Path.Combine(contentDir, "gamecd.cue");
+            File.WriteAllText(rootCue, cueText);
+            if (!string.Equals(Path.GetFullPath(disc), rootCue, StringComparison.OrdinalIgnoreCase))
+                File.Delete(disc);
+            return "gamecd.cue";
+        }
+        catch
+        {
+            return null; // staging failed — leave the disc as-is
+        }
+    }
+
+    private static string MoveToRoot(string src, string contentDir, string destName)
+    {
+        var dest = Path.Combine(contentDir, destName);
+        if (!string.Equals(Path.GetFullPath(src), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+        {
+            if (File.Exists(dest))
+                File.Delete(dest);
+            File.Move(src, dest);
+        }
+        return destName;
+    }
 
     private static (ImportClassification, string?) Classify(List<string> executables, string title)
     {
