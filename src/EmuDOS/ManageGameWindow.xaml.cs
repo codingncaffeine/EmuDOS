@@ -163,6 +163,23 @@ public partial class ManageGameWindow : Window
         }
     }
 
+    private void OnShowInExplorer(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Row row)
+            return;
+        try
+        {
+            if (File.Exists(row.Path))
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{row.Path}\"") { UseShellExecute = true });
+            else if (System.IO.Path.GetDirectoryName(row.Path) is { } dir && Directory.Exists(dir))
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Couldn't open Explorer:\n{ex.Message}", "EmuDOS", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void OnDeleteRow(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not Row row)

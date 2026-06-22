@@ -17,6 +17,7 @@ public sealed class RecordingService(string ffmpegPath)
     public bool IsRecording { get; private set; }
 
     private int _width, _height, _sampleRate;
+    private int _outW, _outH; // encoded output size — the displayed (aspect-corrected) picture
     private string _outputPath = string.Empty, _videoRaw = string.Empty, _audioRaw = string.Empty;
     private string _quality = "Medium";
     private FileStream? _videoFile, _audioFile;
@@ -25,8 +26,12 @@ public sealed class RecordingService(string ffmpegPath)
     private long _framesWritten;
     private DateTime _startTime;
 
-    /// <summary>Begin recording. Returns null on success, or an error message.</summary>
-    public string? Start(string outputPath, int width, int height, int sampleRate, string quality)
+    /// <summary>Begin recording. Frames are captured at <paramref name="width"/>×<paramref name="height"/>
+    /// (the core's native size); the video is encoded at <paramref name="displayWidth"/>×
+    /// <paramref name="displayHeight"/> — the size/shape the player actually sees — when given
+    /// (0 = keep native). Returns null on success, or an error message.</summary>
+    public string? Start(string outputPath, int width, int height, int sampleRate, string quality,
+                         int displayWidth = 0, int displayHeight = 0)
     {
         lock (_lock)
         {
@@ -39,6 +44,8 @@ public sealed class RecordingService(string ffmpegPath)
                 _outputPath = outputPath;
                 _width = width;
                 _height = height;
+                _outW = Even(displayWidth > 0 ? displayWidth : width);
+                _outH = Even(displayHeight > 0 ? displayHeight : height);
                 _sampleRate = sampleRate > 0 ? sampleRate : 48000;
                 _quality = quality;
                 _videoRaw = outputPath + ".video.raw";
@@ -136,8 +143,9 @@ public sealed class RecordingService(string ffmpegPath)
             var args = $"-y -f rawvideo -pix_fmt bgr0 -s {_width}x{_height} -r {fps} -i \"{_videoRaw}\" ";
             if (hasAudio)
                 args += $"-f s16le -ar {_sampleRate} -ac 2 -i \"{_audioRaw}\" ";
-            // yuv420p for universal playback; force even dimensions (yuv420p requires it).
-            args += $"-c:v libx264 -preset {preset} -crf {crf} -pix_fmt yuv420p -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" ";
+            // Scale to the displayed (aspect-corrected) size so the video matches what was on screen;
+            // yuv420p for universal playback (needs even dimensions, which _outW/_outH already are).
+            args += $"-c:v libx264 -preset {preset} -crf {crf} -pix_fmt yuv420p -vf \"scale={_outW}:{_outH}:flags=lanczos\" ";
             if (hasAudio)
                 args += "-c:a aac -b:a 192k ";
             args += $"-movflags +faststart \"{_outputPath}\"";
@@ -159,6 +167,8 @@ public sealed class RecordingService(string ffmpegPath)
             return false;
         }
     }
+
+    private static int Even(double value) => Math.Max(2, (int)Math.Round(value) & ~1);
 
     private void Cleanup()
     {

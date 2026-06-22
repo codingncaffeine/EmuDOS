@@ -19,6 +19,11 @@
         <!-- A media/state/file row: optional thumbnail + two text lines + action buttons. -->
         <DataTemplate x:Key="RowWithOpen">
             <Grid Margin="2,4">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer" Click="OnShowInExplorer"/>
+                    </ContextMenu>
+                </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -41,6 +46,11 @@
 
         <DataTemplate x:Key="RowDeleteOnly">
             <Grid Margin="2,4">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer" Click="OnShowInExplorer"/>
+                    </ContextMenu>
+                </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>

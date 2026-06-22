@@ -693,7 +693,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _recorder = new Core.Media.RecordingService(ffmpeg);
         _recWidth = _frameWidth;
         _recHeight = _frameHeight;
-        var error = _recorder.Start(path2, _recWidth, _recHeight, _sampleRate, services.Settings.VideoQuality);
+        // Encode at the displayed size so the video matches what the player sees (aspect-corrected),
+        // mirroring how a window-size screenshot is captured.
+        int dispW = (int)Screen.ActualWidth, dispH = (int)Screen.ActualHeight;
+        var error = _recorder.Start(path2, _recWidth, _recHeight, _sampleRate, services.Settings.VideoQuality, dispW, dispH);
         if (error is not null)
         {
             _recorder = null;
