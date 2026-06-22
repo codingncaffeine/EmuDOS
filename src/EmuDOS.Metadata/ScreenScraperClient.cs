@@ -81,6 +81,22 @@ public sealed partial class ScreenScraperClient
         return null;
     }
 
+    /// <summary>Find a gameplay video-snap URL (prefers the smaller "video-normalized" media, falling
+    /// back to "video"), or null if ScreenScraper has none.</summary>
+    public async Task<string?> FindVideoUrlAsync(string gameName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+
+        foreach (var candidate in NameCandidates(gameName))
+        {
+            var url = await FetchMediaForNameAsync(candidate, PickVideo, cancellationToken);
+            if (url is not null)
+                return url;
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Fetch descriptive metadata (year, developer, publisher, genre, synopsis) for a DOS game,
     /// reusing the same <c>jeuInfos.php</c> endpoint the art path calls. Null if nothing matched.
@@ -289,6 +305,19 @@ public sealed partial class ScreenScraperClient
         }
 
         return boxes[0]?["url"]?.GetValue<string>() is { Length: > 0 } anyUrl ? anyUrl : null;
+    }
+
+    // Prefer "video-normalized" (smaller, consistent), fall back to "video". Snaps carry no region.
+    private static string? PickVideo(JsonArray medias)
+    {
+        foreach (var wanted in new[] { "video-normalized", "video" })
+        {
+            var match = medias.FirstOrDefault(m =>
+                string.Equals(m?["type"]?.GetValue<string>(), wanted, StringComparison.OrdinalIgnoreCase));
+            if (match?["url"]?.GetValue<string>() is { Length: > 0 } url)
+                return url;
+        }
+        return null;
     }
 
     private static string? PickManual(JsonArray medias)

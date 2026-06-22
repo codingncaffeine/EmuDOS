@@ -1,10 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using EmuDOS.Core.Library;
 using EmuDOS.Core.Model;
 using EmuDOS.Services;
@@ -48,6 +54,8 @@ public partial class GameDetailWindow : Window
 
         if (_services.Store.ReadMetadata(_tile.Game.GameboxPath) is { } md)
             PopulateMetadata(md);
+
+        _ = LoadSnapAsync();
     }
 
     private void PopulateMetadata(GameMetadata md)
@@ -119,7 +127,13 @@ public partial class GameDetailWindow : Window
         _ => $"{seconds / 3600}h",
     };
 
-    private void UpdateFavButton() => FavButton.Content = _isFavorite ? "★ Favorited" : "☆ Favorite";
+    private void UpdateFavButton()
+    {
+        FavButton.Content = _isFavorite ? "★ Favorited" : "☆ Favorite";
+        FavButton.Foreground = _isFavorite
+            ? new SolidColorBrush((Color)FindResource("AccentColor"))
+            : (Brush)FindResource("TextPrimary");
+    }
 
     private void OnFavorite(object sender, RoutedEventArgs e)
     {
@@ -156,5 +170,121 @@ public partial class GameDetailWindow : Window
     {
         if (e.Key == Key.Escape)
             Close();
+    }
+
+    // ── Video snap (ScreenScraper, cached in the retained Snaps folder; placeholder → crossfade) ──
+    private LibVLCSharp.Shared.MediaPlayer? _vlcPlayer;
+    private WriteableBitmap? _videoBitmap;
+    private IntPtr _videoBuffer;
+    private bool _closed, _crossfadeDone;
+
+    private async Task LoadSnapAsync()
+    {
+        try
+        {
+            var snapPath = Path.Combine(_services.Paths.SnapsDir, SnapKey() + ".mp4");
+            if (!File.Exists(snapPath))
+            {
+                // Fetch from ScreenScraper into the retained cache (survives game deletion).
+                if (!await _services.Art.FetchSnapAsync(_tile.Title, snapPath) || _closed)
+                    return;
+            }
+            if (_closed || !File.Exists(snapPath))
+                return;
+
+            SnapPlaceholder.Source = _tile.Cover; // box-art placeholder until the first video frame
+            SnapArea.Visibility = Visibility.Visible;
+            await PlaySnapVideoAsync(snapPath);
+        }
+        catch { /* no snap available — leave the snap area hidden */ }
+    }
+
+    private string SnapKey()
+    {
+        var id = string.IsNullOrWhiteSpace(_tile.Game.CanonicalId) ? _tile.Title : _tile.Game.CanonicalId!;
+        return string.Concat(id.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+    }
+
+    private async Task PlaySnapVideoAsync(string mp4Path)
+    {
+        const int w = 320, h = 240, stride = w * 4; // ScreenScraper snaps are 4:3 320x240
+        _crossfadeDone = false;
+
+        if (_videoBuffer != IntPtr.Zero)
+            Marshal.FreeHGlobal(_videoBuffer);
+        _videoBuffer = Marshal.AllocHGlobal(stride * h);
+        _videoBitmap = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgr32, null);
+        SnapVideo.Source = _videoBitmap;
+
+        IntPtr bufferPtr = _videoBuffer;
+        var libVLC = await VideoPlaybackService.Instance.GetLibVLCAsync();
+        if (libVLC is null || _closed)
+            return;
+
+        await Task.Run(() =>
+        {
+            var player = new LibVLCSharp.Shared.MediaPlayer(libVLC);
+            player.SetVideoFormat("RV32", (uint)w, (uint)h, (uint)stride);
+            player.SetVideoCallbacks(
+                (IntPtr opaque, IntPtr planes) => { Marshal.WriteIntPtr(planes, bufferPtr); return IntPtr.Zero; },
+                null,
+                (IntPtr opaque, IntPtr picture) => Dispatcher.BeginInvoke(() =>
+                {
+                    if (_videoBitmap is null || _videoBuffer == IntPtr.Zero)
+                        return;
+                    _videoBitmap.WritePixels(new Int32Rect(0, 0, w, h), _videoBuffer, stride * h, stride);
+
+                    if (!_crossfadeDone)
+                    {
+                        _crossfadeDone = true;
+                        SnapVideo.Visibility = Visibility.Visible;
+                        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400));
+                        fade.Completed += (_, _) => SnapPlaceholder.Visibility = Visibility.Collapsed;
+                        SnapPlaceholder.BeginAnimation(OpacityProperty, fade);
+                    }
+                }));
+
+            using var media = new LibVLCSharp.Shared.Media(libVLC, mp4Path, LibVLCSharp.Shared.FromType.FromPath);
+            media.AddOption(":input-repeat=65535"); // loop forever
+
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+            {
+                try { player.Dispose(); } catch { }
+                return;
+            }
+
+            bool keep = false;
+            try
+            {
+                // Stash + start atomically on the UI thread so OnClosed can't dispose mid-Play.
+                Dispatcher.Invoke(() =>
+                {
+                    if (_closed)
+                        return;
+                    _vlcPlayer = player;
+                    player.Play(media);
+                    keep = true;
+                });
+            }
+            catch (TaskCanceledException) { }
+
+            if (!keep)
+                try { player.Dispose(); } catch { }
+        });
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _closed = true;
+        var player = _vlcPlayer;
+        _vlcPlayer = null;
+        if (player is not null)
+            Task.Run(() => { try { player.Stop(); } catch { } try { player.Dispose(); } catch { } });
+        if (_videoBuffer != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(_videoBuffer);
+            _videoBuffer = IntPtr.Zero;
+        }
+        base.OnClosed(e);
     }
 }

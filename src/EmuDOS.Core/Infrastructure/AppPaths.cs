@@ -40,6 +40,10 @@ public sealed class AppPaths
     /// <summary>Default location for recorded videos (overridable in Preferences → Media).</summary>
     public string VideosDir => Path.Combine(DataRoot, "Videos");
 
+    /// <summary>Cached gameplay video snaps for the game card, keyed by game identity. Retained — kept
+    /// when a game is deleted so re-importing (e.g. a different version) reuses it, like box art.</summary>
+    public string SnapsDir => Path.Combine(DataRoot, "Snaps");
+
     private static string DefaultDataRoot() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EmuDOS");
 

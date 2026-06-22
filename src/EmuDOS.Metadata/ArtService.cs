@@ -53,6 +53,21 @@ public sealed class ArtService(ScreenScraperClient screenScraper, SteamGridDbCli
     public Task<Core.Model.GameMetadata?> FetchMetadataAsync(string gameName, CancellationToken cancellationToken = default)
         => screenScraper.FetchMetadataAsync(gameName, cancellationToken);
 
+    /// <summary>Fetch a game's gameplay video snap from ScreenScraper and save it to
+    /// <paramref name="destPath"/> (an .mp4). Returns true on success. ScreenScraper-only — SteamGridDB
+    /// has no video.</summary>
+    public async Task<bool> FetchSnapAsync(string gameName, string destPath, CancellationToken cancellationToken = default)
+    {
+        var url = await screenScraper.FindVideoUrlAsync(gameName, cancellationToken);
+        var bytes = url is null ? null : await screenScraper.DownloadAsync(url, cancellationToken);
+        if (bytes is not { Length: > 1000 })
+            return false;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+        await File.WriteAllBytesAsync(destPath, bytes, cancellationToken);
+        return true;
+    }
+
     private async Task<byte[]?> FromScreenScraperAsync(string gameName, CancellationToken cancellationToken)
     {
         var url = await screenScraper.FindBoxArtUrlAsync(gameName, cancellationToken);

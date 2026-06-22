@@ -36,10 +36,26 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Body: metadata / video snap land here in later phases. -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="22,0">
-                    <StackPanel x:Name="BodyPanel"/>
-                </ScrollViewer>
+                <!-- Body: video snap (top) + metadata (scrolls). -->
+                <Grid Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <!-- Snap: box-art placeholder until the video downloads, then crossfade to the loop. -->
+                    <Border x:Name="SnapArea" Grid.Row="0" Width="360" Height="270" Margin="22,4,22,10"
+                            HorizontalAlignment="Center" Background="#22000000"
+                            BorderBrush="{StaticResource BorderNormal}" BorderThickness="1"
+                            CornerRadius="4" Visibility="Collapsed" ClipToBounds="True">
+                        <Grid>
+                            <Image x:Name="SnapPlaceholder" Stretch="Uniform"/>
+                            <Image x:Name="SnapVideo" Stretch="Uniform" Visibility="Collapsed"/>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="22,0">
+                        <StackPanel x:Name="BodyPanel"/>
+                    </ScrollViewer>
+                </Grid>
 
                 <!-- Actions -->
                 <Border Grid.Row="2" Background="{StaticResource BgPrimary}" CornerRadius="0,0,10,10" Padding="16,12">

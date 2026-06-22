@@ -36,7 +36,7 @@ Games run through the **dosbox_pure** libretro core, loaded directly with no man
 | `src/EmuDOS` | WPF app — the shelf UI and emulator window |
 | `src/EmuDOS.Core` | libretro host, dosbox_pure interop, render/input/audio, import, catalog |
 | `src/EmuDOS.Metadata` | box art & manual sources (ScreenScraper, SteamGridDB, Internet Archive) |
-| `src/native/mt32` | the MT-32 synth shim (C over munt) — see below |
+| `src/native/mt32` | the MT-32 synth shim (C over munt) — see the [wiki](https://github.com/codingncaffeine/EmuDOS/wiki/How-It-Works) |
 | `tests/EmuDOS.Tests` | unit tests |
 
 ## MT-32 and the ROMs
@@ -53,6 +53,7 @@ EmuDOS stands on the work of others, with thanks:
 - **[eXoDOS](https://www.retro-exo.com/exodos.html)** — the DOS configuration set our catalog is seeded from.
 - **[libretro](https://www.libretro.com/)** — the core API EmuDOS hosts.
 - **[FFmpeg](https://ffmpeg.org/)** — optional gameplay video recording.
+- **[VLC / LibVLC](https://www.videolan.org/)** by VideoLAN — plays the game-card video snaps.
 - **[ScreenScraper](https://www.screenscraper.fr/)**, **[SteamGridDB](https://www.steamgriddb.com/)**, and the **[Internet Archive](https://archive.org/)** — box art and manuals.
 
 ## Third-party components
@@ -60,8 +61,7 @@ EmuDOS stands on the work of others, with thanks:
 - **DOSBox Pure** (libretro core) — GPLv2; downloaded at runtime, never bundled.
 - **FFmpeg** — GPL; downloaded on demand for the optional video-recording feature, never bundled.
 - **munt / mt32emu** — LGPL 2.1; compiled into our `emudos_mt32.dll` (source under `src/native/mt32`, rebuildable via `build.cmd`).
+- **LibVLC** — LGPL 2.1; bundled (via LibVLCSharp) to play the game-card video snaps.
 - Box art / manuals come from **ScreenScraper**, **SteamGridDB**, and the **Internet Archive** via their APIs.
 
-## Building the MT-32 shim (optional)
-
-The prebuilt `emudos_mt32.dll` is committed and ships with the app. To rebuild it you need Visual Studio with the C++ workload, then run `src/native/mt32/build.cmd`.
+> Rebuilding the bundled MT-32 synth DLL is covered in the [wiki](https://github.com/codingncaffeine/EmuDOS/wiki/How-It-Works#building-the-mt-32-shim-optional).
