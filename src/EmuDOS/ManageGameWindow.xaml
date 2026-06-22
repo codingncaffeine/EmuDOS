@@ -1,0 +1,128 @@
+<Window x:Class="EmuDOS.ManageGameWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manage" Height="600" Width="740"
+        Background="{StaticResource BgPrimary}" WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize" MinHeight="420" MinWidth="520">
+
+    <Window.Resources>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <!-- A media/state/file row: optional thumbnail + two text lines + action buttons. -->
+        <DataTemplate x:Key="RowWithOpen">
+            <Grid Margin="2,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="96" Height="60" Background="#22000000" Margin="0,0,10,0"
+                        CornerRadius="3" Visibility="{Binding ThumbVisibility}">
+                    <Image Source="{Binding Thumb}" Stretch="Uniform"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Primary}" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Secondary}" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Open" Margin="0,0,6,0" Padding="10,3" Click="OnOpenRow"/>
+                    <Button Content="Delete" Padding="10,3" Click="OnDeleteRow"/>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="RowDeleteOnly">
+            <Grid Margin="2,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="96" Height="60" Background="#22000000" Margin="0,0,10,0"
+                        CornerRadius="3" Visibility="{Binding ThumbVisibility}">
+                    <Image Source="{Binding Thumb}" Stretch="Uniform"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Primary}" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Secondary}" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                </StackPanel>
+                <Button Grid.Column="2" Content="Delete" Padding="10,3" VerticalAlignment="Center" Click="OnDeleteRow"/>
+            </Grid>
+        </DataTemplate>
+
+        <Style x:Key="EmptyHint" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+            <Setter Property="Margin" Value="4,12"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <TextBlock x:Name="HeaderText" DockPanel.Dock="Top" Style="{StaticResource Heading}" Margin="18,14,18,8"/>
+        <TabControl Background="{StaticResource BgPrimary}" BorderThickness="0" Padding="6">
+            <TabItem Header="Save states">
+                <Grid Margin="12,8">
+                    <ListBox x:Name="StatesList" Background="Transparent" BorderThickness="0"
+                             ItemTemplate="{StaticResource RowDeleteOnly}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             HorizontalContentAlignment="Stretch"/>
+                    <TextBlock x:Name="StatesEmpty" Style="{StaticResource EmptyHint}"
+                               Text="No save states yet — press F5 in-game to make one." Visibility="Collapsed"/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Screenshots">
+                <Grid Margin="12,8">
+                    <ListBox x:Name="ShotsList" Background="Transparent" BorderThickness="0"
+                             ItemTemplate="{StaticResource RowWithOpen}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             HorizontalContentAlignment="Stretch"/>
+                    <TextBlock x:Name="ShotsEmpty" Style="{StaticResource EmptyHint}"
+                               Text="No screenshots yet — press F12 in-game to capture one." Visibility="Collapsed"/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Videos">
+                <Grid Margin="12,8">
+                    <ListBox x:Name="VideosList" Background="Transparent" BorderThickness="0"
+                             ItemTemplate="{StaticResource RowWithOpen}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             HorizontalContentAlignment="Stretch"/>
+                    <TextBlock x:Name="VideosEmpty" Style="{StaticResource EmptyHint}"
+                               Text="No recordings yet — press F9 in-game to record." Visibility="Collapsed"/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="In-game saves">
+                <Grid Margin="12,8">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="2,0,2,8" FontSize="11"
+                                   Text="Files in this game's save folder. Deleting a game's own save data cannot be undone."/>
+                        <Grid>
+                            <ListBox x:Name="SavesList" Background="Transparent" BorderThickness="0"
+                                     ItemTemplate="{StaticResource RowWithOpen}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     HorizontalContentAlignment="Stretch"/>
+                            <TextBlock x:Name="SavesEmpty" Style="{StaticResource EmptyHint}"
+                                       Text="No save files recorded for this game yet." Visibility="Collapsed"/>
+                        </Grid>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Notes">
+                <DockPanel Margin="12,8">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="2,0,2,6" FontSize="11"
+                               Text="Saved automatically. Stored with the game (notes.md)."/>
+                    <TextBox x:Name="NotesBox" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="13"
+                             Background="{StaticResource BgSecondary}" Foreground="{StaticResource TextPrimary}"
+                             BorderThickness="1" BorderBrush="#33FFFFFF" Padding="8"/>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

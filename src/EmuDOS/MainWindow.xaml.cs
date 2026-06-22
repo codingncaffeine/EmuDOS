@@ -63,6 +63,10 @@ public partial class MainWindow : Window
         var preferences = new MenuItem { Header = "Preferences" };
         preferences.Click += (_, _) => OpenOptions(tile);
 
+        var manage = new MenuItem { Header = "Manage…" };
+        manage.Click += (_, _) =>
+            new ManageGameWindow(((App)Application.Current).Services, tile.Game) { Owner = this }.ShowDialog();
+
         var openInDos = new MenuItem { Header = "Open in DOS" };
         openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
 
@@ -97,6 +101,7 @@ public partial class MainWindow : Window
         manual.Click += async (_, _) => await DownloadManualAsync(tile);
 
         menu.Items.Add(preferences);
+        menu.Items.Add(manage);
         menu.Items.Add(openInDos);
         menu.Items.Add(launchParams);
         menu.Items.Add(boxArt);
