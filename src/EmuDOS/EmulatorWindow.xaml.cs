@@ -639,8 +639,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
                 source = rtb;
             }
 
-            var dir = string.IsNullOrWhiteSpace(services.Settings.ScreenshotFolder)
-                ? services.Paths.ScreenshotsDir : services.Settings.ScreenshotFolder;
+            var dir = new Core.Library.Gamebox(_instance.GameboxPath).ScreenshotsDir;
             System.IO.Directory.CreateDirectory(dir);
             var path = System.IO.Path.Combine(dir, $"{SafeName(_instance.Profile.Title)} {DateTime.Now:yyyy-MM-dd HH-mm-ss}.png");
 
@@ -687,8 +686,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             return;
         }
 
-        var dir = string.IsNullOrWhiteSpace(services.Settings.VideoFolder)
-            ? services.Paths.VideosDir : services.Settings.VideoFolder;
+        var dir = new Core.Library.Gamebox(_instance.GameboxPath).VideosDir;
+        System.IO.Directory.CreateDirectory(dir);
         var path2 = System.IO.Path.Combine(dir, $"{SafeName(_instance.Profile.Title)} {DateTime.Now:yyyy-MM-dd HH-mm-ss}.mp4");
 
         _recorder = new Core.Media.RecordingService(ffmpeg);

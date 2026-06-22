@@ -15,8 +15,17 @@ public sealed class Gamebox(string root)
     /// <summary>Game files, mounted as C:. The generated DOSBOX.BAT is written here at launch.</summary>
     public string ContentDir => Path.Combine(Root, "content");
 
-    /// <summary>Box art, manuals, screenshots.</summary>
+    /// <summary>Box art and manuals.</summary>
     public string MediaDir => Path.Combine(Root, "media");
+
+    /// <summary>Screenshots captured in-game (per-game, under media/).</summary>
+    public string ScreenshotsDir => Path.Combine(Root, "media", "screenshots");
+
+    /// <summary>Recorded videos (per-game, under media/).</summary>
+    public string VideosDir => Path.Combine(Root, "media", "videos");
+
+    /// <summary>Free-form per-game notes (plain text/markdown), travels with the gamebox.</summary>
+    public string NotesPath => Path.Combine(Root, "notes.md");
 
     /// <summary>Save data and save states.</summary>
     public string SavesDir => Path.Combine(Root, "saves");

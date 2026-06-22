@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using EmuDOS.Core.Model;
@@ -36,7 +37,24 @@ public sealed partial class MainViewModel : ObservableObject
     public MainViewModel(AppServices services)
     {
         _services = services;
+        MigrateFlatMedia();
         LoadLibrary();
+    }
+
+    // One-time move of legacy flat screenshots/videos into each game's per-game media folders.
+    private void MigrateFlatMedia()
+    {
+        try
+        {
+            var s = _services.Settings;
+            var p = _services.Paths;
+            var flatShots = string.IsNullOrWhiteSpace(s.ScreenshotFolder) ? p.ScreenshotsDir : s.ScreenshotFolder;
+            var flatVids = string.IsNullOrWhiteSpace(s.VideoFolder) ? p.VideosDir : s.VideoFolder;
+            var marker = Path.Combine(p.DataRoot, ".media-migrated");
+            var games = _services.Library.GetGames().Select(g => (g.Title, g.GameboxPath));
+            EmuDOS.Core.Library.MediaMigration.Run(marker, flatShots, flatVids, games);
+        }
+        catch { /* migration is best-effort; capture already writes per-game */ }
     }
 
     public ObservableCollection<GameTile> Games { get; } = [];
