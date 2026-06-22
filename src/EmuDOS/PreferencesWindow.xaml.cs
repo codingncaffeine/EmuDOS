@@ -325,6 +325,58 @@ public partial class PreferencesWindow : Window
         row.IsBusy = false;
     }
 
+    // ── Backups ─────────────────────────────────────────────────────────────────
+
+    private void OnBackupDatabase(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose a folder for the database backup" };
+        if (dlg.ShowDialog(this) != true)
+            return;
+        try
+        {
+            var src = Path.Combine(_services.Paths.DataRoot, "library.db");
+            var dest = Path.Combine(dlg.FolderName, $"library-{System.DateTime.Now:yyyy-MM-dd-HHmm}.db");
+            File.Copy(src, dest, overwrite: false);
+            Set(BackupStatus, $"Database backed up to {dest}", Success);
+        }
+        catch (System.Exception ex) { Set(BackupStatus, $"Backup failed: {ex.Message}", Failure); }
+    }
+
+    private void OnRestoreDatabase(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose a database backup",
+            Filter = "Database (*.db)|*.db|All files (*.*)|*.*",
+        };
+        if (dlg.ShowDialog(this) != true)
+            return;
+        if (MessageBox.Show(this,
+                "Restore this database on the next launch? It replaces your current favorites, play counts and history, and EmuDOS will need to restart.",
+                "Restore database", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        try
+        {
+            File.Copy(dlg.FileName, EmuDOS.Core.Library.LibraryDatabase.PendingRestorePath(_services.Paths), overwrite: true);
+            Set(BackupStatus, "Restore staged — restart EmuDOS to apply it.", Success);
+        }
+        catch (System.Exception ex) { Set(BackupStatus, $"Restore failed: {ex.Message}", Failure); }
+    }
+
+    private void OnBackupAllSaves(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose where to save the backup archive" };
+        if (dlg.ShowDialog(this) != true)
+            return;
+        try
+        {
+            var dest = Path.Combine(dlg.FolderName, $"emudos-saves-{System.DateTime.Now:yyyy-MM-dd-HHmm}.zip");
+            int games = EmuDOS.Core.Library.SaveBackup.CreateAllSavesArchive(_services.Paths.GameboxesDir, dest);
+            Set(BackupStatus, $"Backed up saves for {games} game(s) to {dest}", Success);
+        }
+        catch (System.Exception ex) { Set(BackupStatus, $"Backup failed: {ex.Message}", Failure); }
+    }
+
     private static void Set(TextBlock target, string text, Brush brush)
     {
         target.Text = text;

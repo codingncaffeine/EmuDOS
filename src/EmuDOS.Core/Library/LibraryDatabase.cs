@@ -22,10 +22,28 @@ public sealed class LibraryDatabase
         _store = store;
         var path = dbPath ?? Path.Combine(paths.DataRoot, "library.db");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        ApplyPendingRestore(path); // a Backups-tab "restore" stages a file applied here, before the DB opens
         _connectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
 
         using var connection = Open();
         Migrate(connection);
+    }
+
+    /// <summary>The path a Backups-tab restore writes to; applied over the DB on next launch (the live
+    /// DB is locked while running, so a restore can't overwrite it in place).</summary>
+    public static string PendingRestorePath(AppPaths paths) => Path.Combine(paths.DataRoot, "library.db.restore");
+
+    private static void ApplyPendingRestore(string dbPath)
+    {
+        var pending = dbPath + ".restore";
+        if (!File.Exists(pending))
+            return;
+        try
+        {
+            File.Copy(pending, dbPath, overwrite: true);
+            File.Delete(pending);
+        }
+        catch { /* leave it staged; retry next launch */ }
     }
 
     /// <summary>Add or refresh a game from its gamebox. Stats are preserved on refresh.</summary>
