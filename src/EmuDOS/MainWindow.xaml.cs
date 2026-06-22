@@ -124,6 +124,11 @@ public partial class MainWindow : Window
         var executables = OrderedExecutables(
             services.Store.ReadState(tile.Game.GameboxPath),
             ScanExecutables(Path.Combine(tile.Game.GameboxPath, "content")));
+        // Also offer programs a CD installer put on the persisted C: drive (dosbox_pure's *.pure.zip
+        // save), which the content-folder scan can't see — so installed CD games get a working picker.
+        foreach (var installed in PureSave.ListInstalledExecutables(Path.Combine(tile.Game.GameboxPath, "saves")))
+            if (!executables.Contains(installed, StringComparer.OrdinalIgnoreCase))
+                executables.Add(installed);
         if (executables.Count > 0)
         {
             var choose = new MenuItem { Header = "Choose program…" };
@@ -167,8 +172,21 @@ public partial class MainWindow : Window
             : state.LastExecutable;
 
         var dialog = new ChooseProgramDialog(tile.Title, executables, current) { Owner = this };
-        if (dialog.ShowDialog() == true && dialog.SelectedExecutable is { } exe)
+        if (dialog.ShowDialog() != true || dialog.SelectedExecutable is not { } exe)
+            return;
+
+        if (PureSave.IsInstalledPath(exe))
+        {
+            // A program installed on the persisted C: drive — pin it via AUTOBOOT.DBP so dosbox_pure
+            // boots straight into it with the disc still mounted as D: (CD checks / CD audio keep
+            // working), then launch. dosbox_pure reads AUTOBOOT.DBP from C: at startup.
+            PureSave.SetAutoBoot(Path.Combine(tile.Game.GameboxPath, "saves"), exe);
+            await LaunchGameAsync(tile);
+        }
+        else
+        {
             await LaunchGameAsync(tile, executableOverride: exe); // remembers it (unless it's a setup tool)
+        }
     }
 
     private static readonly string[] ExecutableExtensions = [".exe", ".com", ".bat"];
