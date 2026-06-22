@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         Title="EmuDOS" Height="840" Width="1458"
-        Icon="/Assets/EmuDOS-Logo.png"
+        Icon="/Assets/EmuDOS.ico"
         MinWidth="1458" MaxWidth="1458"
         Background="{StaticResource BgPrimary}" WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver"
