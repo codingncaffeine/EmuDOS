@@ -140,11 +140,12 @@ public sealed class GitHubSyncService
                 return new CloudSyncResult(0, 0, "Couldn't access or create the sync repo.");
             }
 
-            // Push the library database (gzip'd snapshot).
+            // Push the library database (gzip'd snapshot). Read with shared access — SQLite keeps the
+            // live DB file open, so a plain read would fail with "in use by another process".
             if (File.Exists(dbPath))
             {
                 progress?.Report("Uploading library database…");
-                if (await PutAsync(token, login, repo, "db/library.db.gz", Gzip(File.ReadAllBytes(dbPath)), ct).ConfigureAwait(false))
+                if (await PutAsync(token, login, repo, "db/library.db.gz", Gzip(ReadShared(dbPath)), ct).ConfigureAwait(false))
                 {
                     up++;
                     _log("Uploaded library database.");
@@ -309,6 +310,15 @@ public sealed class GitHubSyncService
 
     private static string EscapePath(string path) =>
         string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+
+    // Read a file that another process may hold open (e.g. SQLite's live DB) by allowing shared R/W.
+    private static byte[] ReadShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
+    }
 
     private static byte[] Gzip(byte[] data)
     {
