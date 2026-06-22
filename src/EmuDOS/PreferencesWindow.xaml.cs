@@ -390,6 +390,19 @@ public partial class PreferencesWindow : Window
         ConnectButton.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
         SyncNowButton.IsEnabled = connected;
         DisconnectButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+        CloudPassphrase.Text = _services.Settings.CloudEncryptionPassphrase;
+    }
+
+    // Persist the typed passphrase and derive the encryption key (null = no encryption).
+    private byte[]? CloudKey()
+    {
+        var pass = CloudPassphrase.Text ?? string.Empty;
+        if (_services.Settings.CloudEncryptionPassphrase != pass)
+        {
+            _services.Settings.CloudEncryptionPassphrase = pass;
+            _services.SettingsStore.Save(_services.Settings);
+        }
+        return string.IsNullOrEmpty(pass) ? null : EmuDOS.Metadata.CloudCrypto.DeriveKey(pass);
     }
 
     private async void OnConnectGitHub(object sender, RoutedEventArgs e)
@@ -436,9 +449,10 @@ public partial class PreferencesWindow : Window
         var progress = new System.Progress<string>(s => CloudStatus.Text = s);
         try
         {
+            var key = CloudKey();
             var s = _services.Settings;
             var result = await Gh.SyncAsync(s.GitHubToken, s.GitHubLogin, s.GitHubRepo,
-                _services.Paths.GameboxesDir, Path.Combine(_services.Paths.DataRoot, "library.db"), progress);
+                _services.Paths.GameboxesDir, Path.Combine(_services.Paths.DataRoot, "library.db"), progress, encKey: key);
             CloudStatus.Text = result.Ok
                 ? $"Synced — {result.Uploaded} uploaded, {result.Downloaded} downloaded."
                 : $"Sync failed: {result.Error}";

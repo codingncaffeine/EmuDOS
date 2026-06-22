@@ -36,8 +36,17 @@ public sealed class GitHubSyncService
     private static readonly SemaphoreSlim Gate = new(1, 1); // only one sync at a time (launch + manual)
 
     private readonly Action<string> _log;
+    private byte[]? _encKey; // set per SyncAsync; non-null = encrypt uploads / decrypt downloads
 
     public GitHubSyncService(Action<string>? log = null) => _log = log ?? (_ => { });
+
+    // Encrypt before upload (after gzip) when a key is set.
+    private byte[] Wrap(byte[] data) => _encKey is null ? data : CloudCrypto.Encrypt(data, _encKey);
+
+    // Decrypt a download: with a key, decrypt (null = wrong key); without one, skip encrypted blobs.
+    private byte[]? Unwrap(byte[] data) =>
+        _encKey is not null ? CloudCrypto.TryDecrypt(data, _encKey)
+        : CloudCrypto.IsEncrypted(data) ? null : data;
 
     private static HttpClient CreateClient()
     {
@@ -128,8 +137,10 @@ public sealed class GitHubSyncService
 
     // ── Sync ────────────────────────────────────────────────────────────────────────────
     public async Task<CloudSyncResult> SyncAsync(string token, string login, string repo,
-        string gameboxesDir, string dbPath, IProgress<string>? progress = null, CancellationToken ct = default)
+        string gameboxesDir, string dbPath, IProgress<string>? progress = null, CancellationToken ct = default,
+        byte[]? encKey = null)
     {
+        _encKey = encKey;
         int up = 0, down = 0;
         if (!await Gate.WaitAsync(TimeSpan.FromMinutes(5), ct).ConfigureAwait(false))
             return new CloudSyncResult(0, 0, "Another sync is already running.");
@@ -148,7 +159,7 @@ public sealed class GitHubSyncService
             if (File.Exists(dbPath))
             {
                 progress?.Report("Uploading library database…");
-                if (await PutAsync(token, login, repo, "db/library.db.gz", Gzip(ReadShared(dbPath)), ct).ConfigureAwait(false))
+                if (await PutAsync(token, login, repo, "db/library.db.gz", Wrap(Gzip(ReadShared(dbPath))), ct).ConfigureAwait(false))
                 {
                     up++;
                     _log("Uploaded library database.");
@@ -179,13 +190,13 @@ public sealed class GitHubSyncService
                 {
                     if (remote.Contains(Path.GetFileName(f))) // additive: never overwrite an existing state
                         continue;
-                    if (await PutAsync(token, login, repo, $"saves/{name}/{Path.GetFileName(f)}", File.ReadAllBytes(f), ct).ConfigureAwait(false))
+                    if (await PutAsync(token, login, repo, $"saves/{name}/{Path.GetFileName(f)}", Wrap(File.ReadAllBytes(f)), ct).ConfigureAwait(false))
                     { up++; gameUp++; }
                     else
                         _log($"WARN: upload failed for saves/{name}/{Path.GetFileName(f)}");
                 }
                 bool notesUp = File.Exists(notes) &&
-                    await PutAsync(token, login, repo, $"notes/{name}.md", File.ReadAllBytes(notes), ct).ConfigureAwait(false);
+                    await PutAsync(token, login, repo, $"notes/{name}.md", Wrap(File.ReadAllBytes(notes)), ct).ConfigureAwait(false);
                 if (notesUp)
                     up++;
                 if (gameUp > 0 || notesUp)
@@ -208,6 +219,12 @@ public sealed class GitHubSyncService
                     var bytes = await GetBlobAsync(token, login, repo, sha, ct).ConfigureAwait(false);
                     if (bytes is null)
                         continue;
+                    bytes = Unwrap(bytes);
+                    if (bytes is null) // encrypted but no/wrong passphrase
+                    {
+                        _log($"Skipped (can't decrypt) saves/{folder}/{fname}");
+                        continue;
+                    }
                     Directory.CreateDirectory(localSaves);
                     File.WriteAllBytes(local, bytes);
                     down++;

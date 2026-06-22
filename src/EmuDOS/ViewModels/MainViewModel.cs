@@ -66,6 +66,8 @@ public sealed partial class MainViewModel : ObservableObject
         string token = s.GitHubToken, login = s.GitHubLogin, repo = s.GitHubRepo;
         var gameboxesDir = _services.Paths.GameboxesDir;
         var dbPath = Path.Combine(_services.Paths.DataRoot, "library.db");
+        var key = string.IsNullOrEmpty(s.CloudEncryptionPassphrase)
+            ? null : EmuDOS.Metadata.CloudCrypto.DeriveKey(s.CloudEncryptionPassphrase);
         var log = _services.CloudLog;
         var gh = new EmuDOS.Metadata.GitHubSyncService(log.Info);
 
@@ -75,7 +77,7 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 log.Info("Auto-sync at launch starting…");
                 Ui(() => Report("Syncing saves…", busy: true));
-                var r = await gh.SyncAsync(token, login, repo, gameboxesDir, dbPath);
+                var r = await gh.SyncAsync(token, login, repo, gameboxesDir, dbPath, encKey: key);
                 Ui(() => Report(r.Ok
                     ? $"Saves synced — {r.Uploaded} uploaded, {r.Downloaded} downloaded."
                     : $"Cloud sync failed: {r.Error}", busy: false));

@@ -65,4 +65,8 @@ public sealed class UserSettings
 
     /// <summary>The private repo that holds synced saves.</summary>
     public string GitHubRepo { get; set; } = "emudos-saves";
+
+    /// <summary>Optional passphrase to encrypt cloud-synced save data (empty = no encryption). Protects
+    /// the copy stored in the cloud repo; the same passphrase is needed on every PC that syncs.</summary>
+    public string CloudEncryptionPassphrase { get; set; } = string.Empty;
 }
