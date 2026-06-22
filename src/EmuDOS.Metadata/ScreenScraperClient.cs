@@ -223,41 +223,50 @@ public sealed partial class ScreenScraperClient
         if (wanted.Length == 0)
             return null;
 
+        // SS's search can return nothing for a trailing Arabic number against a Roman-numeral catalog
+        // name ("Kings Quest 6" -> empty, but "Kings Quest" returns the series). So search with the
+        // number dropped and numeral-swapped too, then score every result by the FULL wanted name so
+        // the right entry still wins.
+        var bare = StripNoise(gameName);
+        var terms = new List<string>();
+        foreach (var t in new[] { bare, DropTrailingNumber(bare), SwapNumeralStyle(bare, toRoman: true) })
+            if (!string.IsNullOrWhiteSpace(t) && !terms.Contains(t, StringComparer.OrdinalIgnoreCase))
+                terms.Add(t);
+
+        string? bestId = null;
+        double bestScore = 0;
         foreach (var systemPart in new[] { $"&systemeid={DosSystemId}", "" })
         {
-            var url = $"{BaseUrl}jeuRecherche.php?{Auth()}{systemPart}&recherche={Esc(StripNoise(gameName))}";
-            using var response = await _http.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-                continue;
-            var body = await response.Content.ReadAsStringAsync(ct);
-
-            string? bestId = null;
-            double bestScore = 0;
-            try
+            foreach (var term in terms)
             {
-                var jeux = JsonNode.Parse(body)?["response"]?["jeux"]?.AsArray();
-                if (jeux is null)
+                var url = $"{BaseUrl}jeuRecherche.php?{Auth()}{systemPart}&recherche={Esc(term)}";
+                using var response = await _http.GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode)
                     continue;
-                foreach (var jeu in jeux)
+                var body = await response.Content.ReadAsStringAsync(ct);
+                try
                 {
-                    if (jeu?["id"]?.ToString() is not { Length: > 0 } id)
+                    var jeux = JsonNode.Parse(body)?["response"]?["jeux"]?.AsArray();
+                    if (jeux is null)
                         continue;
-                    foreach (var nom in GameNames(jeu))
+                    foreach (var jeu in jeux)
                     {
-                        var norm = NormalizeForCompare(nom);
-                        var score = NameScore(wanted, norm);
-                        if (!NumbersCompatible(LastNumber(wanted), LastNumber(norm)))
-                            score *= 0.4; // wrong sequel number — a different game in the series
-                        if (score > bestScore) { bestScore = score; bestId = id; }
+                        if (jeu?["id"]?.ToString() is not { Length: > 0 } id)
+                            continue;
+                        foreach (var nom in GameNames(jeu))
+                        {
+                            var score = BestScore(wanted, nom);
+                            if (score > bestScore) { bestScore = score; bestId = id; }
+                        }
                     }
                 }
+                catch { /* malformed search response — try the next term/scope */ }
             }
-            catch { continue; }
 
             if (bestId is not null && bestScore >= 0.6)
-                return bestId;
+                return bestId; // resolved within the DOS scope; no need to widen to all systems
         }
-        return null;
+        return bestId is not null && bestScore >= 0.6 ? bestId : null;
     }
 
     // All textual names a jeuRecherche result carries (regional names array + a flat "nom").
@@ -281,10 +290,15 @@ public sealed partial class ScreenScraperClient
     private static string? AsString(JsonNode? node) =>
         node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s : null;
 
-    // Lowercase, numeral-normalized (Roman->Arabic so "V" == "5"), alphanumerics only.
+    // Lowercase, numeral-normalized (Roman->Arabic so "V" == "5"), "&"->"and", accents folded
+    // (café == cafe), alphanumerics only — so minor spelling/punctuation differences compare equal.
     private static string NormalizeForCompare(string name)
     {
-        var s = SwapNumeralStyle(StripNoise(name), toRoman: false).ToLowerInvariant();
+        var s = SwapNumeralStyle(StripNoise(name), toRoman: false).Replace("&", " and ").ToLowerInvariant();
+        s = new string(s.Normalize(System.Text.NormalizationForm.FormD)
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                        != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .ToArray());
         return new string(s.Where(char.IsLetterOrDigit).ToArray());
     }
 
@@ -322,11 +336,38 @@ public sealed partial class ScreenScraperClient
     // fuzzy or wrong-sequel hit ("Police Quest 1" -> "Police Quest 2") never renames the game.
     private static bool IsConfidentRename(string wanted, string canonical)
     {
-        var a = NormalizeForCompare(wanted);
-        var b = NormalizeForCompare(canonical);
-        return a.Length > 0 && b.Length > 0
-            && NumbersCompatible(LastNumber(a), LastNumber(b))
-            && NameScore(a, b) >= 0.85;
+        var w = NormalizeForCompare(wanted);
+        return w.Length > 0 && BestScore(w, canonical) >= 0.85;
+    }
+
+    // Best similarity of the wanted (already-normalized) title against a candidate name AND its
+    // pre-subtitle base, minus a penalty for a conflicting sequel number. Scoring the base too means a
+    // single missing letter or apostrophe still matches when SS appends a subtitle — e.g.
+    // "King Quest 4" vs "King's Quest IV: The Perils of Rosella" (edit distance 1 against the base).
+    private static double BestScore(string wantedNorm, string candidateName)
+    {
+        double best = 0;
+        foreach (var raw in new[] { candidateName, BeforeSubtitle(candidateName) })
+        {
+            var variant = NormalizeForCompare(raw);
+            if (variant.Length == 0)
+                continue;
+            var score = NameScore(wantedNorm, variant);
+            if (!NumbersCompatible(LastNumber(wantedNorm), LastNumber(variant)))
+                score *= 0.4; // wrong sequel number — a different game in the series
+            if (score > best)
+                best = score;
+        }
+        return best;
+    }
+
+    private static string BeforeSubtitle(string name)
+    {
+        int colon = name.IndexOf(':');
+        if (colon > 0)
+            return name[..colon];
+        var dash = Regex.Match(name, @"\s[-–]\s");
+        return dash.Success ? name[..dash.Index] : name;
     }
 
     private static int Levenshtein(string a, string b)
