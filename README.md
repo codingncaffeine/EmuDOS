@@ -2,6 +2,10 @@
   <img src="src/EmuDOS/Assets/EmuDOS-Logo.png" alt="EmuDOS" width="420">
 </p>
 
+<p align="center">
+  <a href="https://emudos.emutastic.com/#features"><b>🌐 Website &amp; feature tour</b></a>
+</p>
+
 A good-looking, Boxer-style DOS gaming frontend for Windows. Drop your games in and they appear as boxes on a shelf — art downloaded automatically, sensible settings applied for you, and Roland MT-32 music (with a working LCD) when you supply the ROMs.
 
 Inspired by [Boxer](http://boxerapp.com/) for the Mac, built Windows-first.
