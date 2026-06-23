@@ -412,6 +412,14 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         // compare hotkeys against the unwrapped key or an F10 binding never matches.
         var effective = e.Key == Key.System ? e.SystemKey : e.Key;
 
+        // Ctrl+V types clipboard text into DOS (Boxer-style paste); the game never sees the shortcut.
+        if (effective == Key.V && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            PasteFromClipboard();
+            e.Handled = true;
+            return;
+        }
+
         // Bound hotkeys are handled here and not forwarded to the game.
         if (effective == _screenshotKey)
         {
@@ -577,6 +585,76 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (wasDown)
             _keyEvents.Enqueue(new KeyEvent(false, (uint)key, 0, Modifiers()));
         e.Handled = true;
+    }
+
+    /// <summary>Type clipboard text into DOS as paced keystrokes (Boxer-style paste). Bound to Ctrl+V.</summary>
+    private void PasteFromClipboard()
+    {
+        string text;
+        try { text = Clipboard.GetText(); }
+        catch { return; }
+        if (string.IsNullOrEmpty(text))
+            return;
+        if (text.Length > 4096)
+            text = text[..4096]; // commands/serials are short — cap to avoid flooding the BIOS buffer
+
+        var chars = new Queue<char>(text);
+        DosKey? holding = null;
+        ushort holdMods = 0;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(25) };
+        timer.Tick += (_, _) =>
+        {
+            // Release the previously pressed key one tick after pressing it — a clean, paced tap.
+            if (holding is { } h)
+            {
+                _keyEvents.Enqueue(new KeyEvent(false, (uint)h, 0, holdMods));
+                holding = null;
+                return;
+            }
+            if (chars.Count == 0)
+            {
+                timer.Stop();
+                return;
+            }
+            var mapped = CharToKey(chars.Dequeue());
+            if (mapped is null)
+                return; // unmappable character — skip it and continue next tick
+            var (key, shift) = mapped.Value;
+            holdMods = shift ? (ushort)KeyModifier.Shift : (ushort)0;
+            _keyEvents.Enqueue(new KeyEvent(true, (uint)key, CharFor(key, shift, false), holdMods));
+            holding = key;
+        };
+        timer.Start();
+    }
+
+    // Map a character to the DOS key (and whether Shift is needed) that produces it (US layout).
+    private static (DosKey Key, bool Shift)? CharToKey(char c)
+    {
+        if (c is >= 'a' and <= 'z') return (DosKey.A + (c - 'a'), false);
+        if (c is >= 'A' and <= 'Z') return (DosKey.A + (c - 'A'), true);
+        if (c is >= '0' and <= '9') return (DosKey.D0 + (c - '0'), false);
+        return c switch
+        {
+            ' ' => (DosKey.Space, false),
+            '\n' or '\r' => (DosKey.Enter, false),
+            '\t' => (DosKey.Tab, false),
+            '-' => (DosKey.Minus, false), '_' => (DosKey.Minus, true),
+            '=' => (DosKey.Equals, false), '+' => (DosKey.Equals, true),
+            ',' => (DosKey.Comma, false), '<' => (DosKey.Comma, true),
+            '.' => (DosKey.Period, false), '>' => (DosKey.Period, true),
+            '/' => (DosKey.Slash, false), '?' => (DosKey.Slash, true),
+            ';' => (DosKey.Semicolon, false), ':' => (DosKey.Semicolon, true),
+            '\'' => (DosKey.Apostrophe, false), '"' => (DosKey.Apostrophe, true),
+            '[' => (DosKey.LeftBracket, false), '{' => (DosKey.LeftBracket, true),
+            ']' => (DosKey.RightBracket, false), '}' => (DosKey.RightBracket, true),
+            '\\' => (DosKey.Backslash, false), '|' => (DosKey.Backslash, true),
+            '`' => (DosKey.Backquote, false), '~' => (DosKey.Backquote, true),
+            ')' => (DosKey.D0, true), '!' => (DosKey.D1, true), '@' => (DosKey.D2, true),
+            '#' => (DosKey.D3, true), '$' => (DosKey.D4, true), '%' => (DosKey.D5, true),
+            '^' => (DosKey.D6, true), '&' => (DosKey.D7, true), '*' => (DosKey.D8, true),
+            '(' => (DosKey.D9, true),
+            _ => null,
+        };
     }
 
     private void TogglePause()
