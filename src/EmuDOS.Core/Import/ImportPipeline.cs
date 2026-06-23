@@ -164,9 +164,12 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             // registers MSCDEX and reads raw MODE1/2352 cue/bin, keeping CD audio).
             if (discMount is null && profile.SourceMedia != SourceMediaType.Iso
                 && !profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase))
-                && StageBundledDiscAtRoot(box.ContentDir) is { } rootDisc)
+                && StageBundledDiscsAtRoot(box.ContentDir) is { Count: > 0 } rootDiscs)
             {
-                var pre = new List<string> { $"IMGMOUNT D: \"c:\\{rootDisc}\" -t cdrom" };
+                // Mount every disc of the set on one D: drive so a multi-disc game can swap discs
+                // (dosbox_pure cycles them via its disc menu); a single-disc game is just one image.
+                var images = string.Join(" ", rootDiscs.Select(d => $"\"c:\\{d}\""));
+                var pre = new List<string> { $"IMGMOUNT D: {images} -t cdrom" };
                 pre.AddRange(profile.Launch.PreCommands);
                 profile = profile with { Launch = profile.Launch with { PreCommands = pre } };
             }
@@ -430,44 +433,73 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
     /// name and return the root mount target (e.g. "gamecd.cue"). dosbox can't IMGMOUNT an image that's
     /// deeply nested or has a long/spaced name inside the union-mounted C:. For a .cue, its data tracks
     /// are moved alongside and the cue's FILE lines rewritten to match. Null if there's no disc.</summary>
-    private static string? StageBundledDiscAtRoot(string contentDir)
+    /// <summary>
+    /// Flatten a folder game's bundled CD(s) to the content ROOT under short, space-free names and
+    /// return them in disc order, so a multi-disc game ends up as one swappable D: set. dosbox can't
+    /// IMGMOUNT an image that's deeply nested or has a long/spaced name from inside the union-mounted
+    /// C:, so each disc — and, for a .cue, its referenced tracks — is copied to the root and the cue
+    /// rewritten to the new names. Returns an empty list when there's nothing to stage.
+    /// </summary>
+    private static IReadOnlyList<string> StageBundledDiscsAtRoot(string contentDir)
     {
-        var disc = Directory.EnumerateFiles(contentDir, "*", SearchOption.AllDirectories)
+        var all = Directory.EnumerateFiles(contentDir, "*", SearchOption.AllDirectories)
             .Where(f => RootableDiscExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
-            .OrderBy(f => Array.IndexOf(RootableDiscExts, Path.GetExtension(f).ToLowerInvariant()))
-            .ThenBy(f => f, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-        if (disc is null)
-            return null;
+            .ToList();
+        if (all.Count == 0)
+            return [];
+
+        // Discs of one game ("…DISC1.cue" + "…DISC2.cue") group into a single swap set; prefer the
+        // largest set (a real multi-disc game) over a stray loose image.
+        var set = GroupDiscSets(all)
+            .OrderByDescending(s => s.Count)
+            .ThenBy(s => s[0], StringComparer.OrdinalIgnoreCase)
+            .First();
+
+        var staged = new List<string>();
+        var disc = 0;
+        foreach (var image in set)
+        {
+            disc++;
+            var stem = set.Count == 1 ? "gamecd" : $"gamecd{disc:00}";
+            if (StageOneDisc(image, contentDir, stem) is { } name)
+                staged.Add(name);
+        }
+        return staged;
+    }
+
+    // Copy one disc image (and, for a .cue, its referenced tracks) to the content root as
+    // <stem>.<ext>, rewriting the cue's FILE references; returns the root image name, or null on failure.
+    private static string? StageOneDisc(string image, string contentDir, string stem)
+    {
         try
         {
-            var ext = Path.GetExtension(disc).ToLowerInvariant();
+            var ext = Path.GetExtension(image).ToLowerInvariant();
             if (ext != ".cue")
-                return MoveToRoot(disc, contentDir, "gamecd" + ext);
+                return MoveToRoot(image, contentDir, stem + ext);
 
-            var cueDir = Path.GetDirectoryName(disc)!;
-            var cueText = File.ReadAllText(disc);
-            var bins = CueReferencedFiles(disc).ToList();
-            var n = 0;
+            var cueDir = Path.GetDirectoryName(image)!;
+            var cueText = File.ReadAllText(image);
+            var bins = CueReferencedFiles(image).ToList();
+            var track = 0;
             foreach (var bin in bins)
             {
-                var shortName = bins.Count == 1
-                    ? "gamecd" + Path.GetExtension(bin)
-                    : $"gamecd{++n:00}" + Path.GetExtension(bin);
+                var binName = bins.Count == 1
+                    ? stem + Path.GetExtension(bin)
+                    : $"{stem}_{++track:00}" + Path.GetExtension(bin);
                 var src = Path.Combine(cueDir, bin);
                 if (File.Exists(src))
-                    MoveToRoot(src, contentDir, shortName);
-                cueText = cueText.Replace('"' + bin + '"', '"' + shortName + '"');
+                    MoveToRoot(src, contentDir, binName);
+                cueText = cueText.Replace('"' + bin + '"', '"' + binName + '"');
             }
-            var rootCue = Path.Combine(contentDir, "gamecd.cue");
+            var rootCue = Path.Combine(contentDir, stem + ".cue");
             File.WriteAllText(rootCue, cueText);
-            if (!string.Equals(Path.GetFullPath(disc), rootCue, StringComparison.OrdinalIgnoreCase))
-                File.Delete(disc);
-            return "gamecd.cue";
+            if (!string.Equals(Path.GetFullPath(image), rootCue, StringComparison.OrdinalIgnoreCase))
+                File.Delete(image);
+            return stem + ".cue";
         }
         catch
         {
-            return null; // staging failed — leave the disc as-is
+            return null; // staging this disc failed — skip it; the others may still mount
         }
     }
 

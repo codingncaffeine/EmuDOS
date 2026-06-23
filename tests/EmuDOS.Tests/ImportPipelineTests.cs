@@ -26,6 +26,35 @@ public class ImportPipelineTests
     }
 
     [Fact]
+    public async Task Bundles_a_multi_disc_set_onto_one_swappable_drive()
+    {
+        var source = TempDir();
+        File.WriteAllText(Path.Combine(source, "GAME.EXE"), "x");
+        // Two discs nested in spaced folders — the messy real-world shape that can't IMGMOUNT in place.
+        var d1 = Path.Combine(source, "My Game (CD-ROM)", "Disc 1");
+        var d2 = Path.Combine(source, "My Game (CD-ROM)", "Disc 2");
+        Directory.CreateDirectory(d1);
+        Directory.CreateDirectory(d2);
+        File.WriteAllText(Path.Combine(d1, "GAME_DISC1.bin"), "1");
+        File.WriteAllText(Path.Combine(d1, "GAME_DISC1.cue"), "FILE \"GAME_DISC1.bin\" BINARY\n  TRACK 01 MODE1/2352\n");
+        File.WriteAllText(Path.Combine(d2, "GAME_DISC2.bin"), "2");
+        File.WriteAllText(Path.Combine(d2, "GAME_DISC2.cue"), "FILE \"GAME_DISC2.bin\" BINARY\n  TRACK 01 MODE1/2352\n");
+        var (pipeline, store) = NewPipeline();
+
+        var result = await pipeline.ImportAsync(source);
+
+        Assert.True(result.Success, result.Error);
+        var content = Path.Combine(result.GameboxPath!, "content");
+        // Both discs flattened to the root and mounted on a single D: so dosbox_pure can swap them.
+        Assert.True(File.Exists(Path.Combine(content, "gamecd01.cue")));
+        Assert.True(File.Exists(Path.Combine(content, "gamecd02.cue")));
+        var mount = Assert.Single(store.ReadProfile(result.GameboxPath!).Launch.PreCommands,
+            c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("gamecd01.cue", mount);
+        Assert.Contains("gamecd02.cue", mount);
+    }
+
+    [Fact]
     public async Task Installer_only_folder_is_needs_install()
     {
         var source = TempDir();
