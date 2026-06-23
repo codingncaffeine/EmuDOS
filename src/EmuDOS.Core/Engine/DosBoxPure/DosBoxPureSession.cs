@@ -138,7 +138,7 @@ public sealed class DosBoxPureSession : IDosSession
                 SaveDirectory = _instance.SavePath,
             };
 
-            var plan = DosBoxPureAdapter.BuildLaunchPlan(_instance.Profile);
+            var plan = DosBoxPureAdapter.BuildLaunchPlan(_instance.Profile, _instance.ContentPath);
             Directory.CreateDirectory(_instance.ContentPath);
 
             string loadTarget;

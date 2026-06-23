@@ -146,4 +146,19 @@ public class DosBoxPureAdapterTests
 
         Assert.Equal("GM.sf2", options["dosbox_pure_midi"]);
     }
+
+    [Fact]
+    public void Iso_forces_the_start_menu_until_the_game_is_installed()
+    {
+        var iso = new GameProfile { SourceMedia = SourceMediaType.Iso };
+
+        // Fresh CD (no AUTOBOOT.DBP yet): keep the menu open for install / boot-OS.
+        var fresh = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "emudos_iso_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(fresh);
+        Assert.Equal("-1", DosBoxPureAdapter.BuildCoreOptions(iso, fresh)["dosbox_pure_menu_time"]);
+
+        // Installed CD game (AUTOBOOT.DBP present): don't force the menu — let it auto-start.
+        System.IO.File.WriteAllText(System.IO.Path.Combine(fresh, "AUTOBOOT.DBP"), "C:\\GAME\\RUN.BAT");
+        Assert.False(DosBoxPureAdapter.BuildCoreOptions(iso, fresh).ContainsKey("dosbox_pure_menu_time"));
+    }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text;
 using EmuDOS.Core.Model;
 
@@ -38,18 +39,19 @@ public static class DosBoxPureAdapter
     ];
 
     /// <summary>Build the full set of core options + the DOSBOX.BAT for a profile.</summary>
-    public static DosBoxPureLaunchPlan BuildLaunchPlan(GameProfile profile)
+    public static DosBoxPureLaunchPlan BuildLaunchPlan(GameProfile profile, string? contentDir = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         return new DosBoxPureLaunchPlan
         {
-            CoreOptions = BuildCoreOptions(profile),
+            CoreOptions = BuildCoreOptions(profile, contentDir),
             AutoexecBat = BuildAutoexecBat(profile),
         };
     }
 
-    /// <summary>Map a profile to dosbox_pure_* core-option values.</summary>
-    public static IReadOnlyDictionary<string, string> BuildCoreOptions(GameProfile profile)
+    /// <summary>Map a profile to dosbox_pure_* core-option values. <paramref name="contentDir"/> lets
+    /// the start-menu behavior adapt once a CD game has been installed.</summary>
+    public static IReadOnlyDictionary<string, string> BuildCoreOptions(GameProfile profile, string? contentDir = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         var o = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -79,9 +81,14 @@ public static class DosBoxPureAdapter
         // Disc images load as content with no autoexec, so force the core's start menu to stay open
         // (-1) — that's where "Boot and Install New Operating System" + the hard-disk size live.
         // Normal games auto-run via DOSBOX.BAT, so they keep the default (auto-start) behavior.
+        // BUT once a CD game has been installed, the core writes an AUTOBOOT.DBP recording what to run;
+        // from then on, drop the forced menu so the core auto-starts that target instead of trapping
+        // the user at the menu every launch.
         if (profile.SourceMedia == SourceMediaType.Iso)
         {
-            o["dosbox_pure_menu_time"] = "-1";
+            var installed = contentDir is not null && File.Exists(Path.Combine(contentDir, "AUTOBOOT.DBP"));
+            if (!installed)
+                o["dosbox_pure_menu_time"] = "-1";
             // When booting an installed OS, don't create the empty writable D: scratch drive — it
             // shows up confusingly labelled after our .m3u8. Use only the mounted CD-ROM(s) instead,
             // so a game disc is the drive the OS sees. (No effect on plain DOS CD games.)
