@@ -29,11 +29,16 @@ public partial class CheatWindow : Window
 
     public CheatWindow() : this(null) { }
 
+    private readonly EmuDOS.Core.Infrastructure.AppLog _log;
+
     public CheatWindow(IDosSession? session)
     {
         InitializeComponent();
+        _log = new EmuDOS.Core.Infrastructure.AppLog(((App)Application.Current).Services.Paths, "cheats.log");
+        _log.Info($"CheatWindow opened: session={(session is null ? "null (preview)" : "live")}"
+            + (session is not null ? $", MemoryRegions={session.MemoryRegions.Count}" : ""));
         if (session is not null)
-            _engine = new CheatEngine(session);
+            _engine = new CheatEngine(session, _log.Info);
 
         ResultsList.DisplayMemberPath = nameof(ResultView.Display);
         CheatTable.ItemsSource = _rows;
@@ -80,6 +85,7 @@ public partial class CheatWindow : Window
         if (_engine is null) { Beep("PREVIEW — OPEN IN A GAME WITH F11"); return; }
         double? value = ParseValue(ValueBox.Text, _type);
         if (_comparison == ScanComparison.Exact && value is null) { Beep("ENTER A VALUE"); return; }
+        _log.Info($"START SCAN: typedText='{ValueBox.Text}' type={_type} cmp={_comparison} parsed={value?.ToString() ?? "null"}");
         Beep("SCANNING…");
         var (engine, type, cmp) = (_engine, _type, _comparison);
         int n = await Task.Run(() => engine.FirstScan(type, cmp, value)); // off the UI thread

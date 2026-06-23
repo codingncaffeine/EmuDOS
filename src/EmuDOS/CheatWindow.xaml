@@ -43,7 +43,11 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <TextBlock><Run Text="["/><ContentPresenter/><Run Text="]"/></TextBlock>
+                        <!-- Transparent bg = the WHOLE button area is hit-testable (a bare TextBlock
+                             only registers clicks on the glyphs, so most clicks missed). -->
+                        <Border Background="Transparent" Padding="2,1">
+                            <TextBlock><Run Text="["/><ContentPresenter/><Run Text="]"/></TextBlock>
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

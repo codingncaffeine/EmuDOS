@@ -16,13 +16,14 @@ public readonly record struct ScanResult(ulong Address, double Value);
 /// the usual comparisons, plus typed read/write and a freeze set re-applied each frame by the session.
 /// Snapshot-based — each scan copies the core's memory and narrows the candidate set.
 /// </summary>
-public sealed class CheatEngine(IDosSession session)
+public sealed class CheatEngine(IDosSession session, Action<string>? log = null)
 {
     // Unknown-value first scans enumerate every offset, so cap them to small regions (conventional +
     // low memory, where game variables live) to keep the candidate set sane.
     private const long UnknownScanRegionCap = 8 * 1024 * 1024;
 
     private readonly IDosSession _session = session;
+    private readonly Action<string>? _log = log;
     private IReadOnlyList<(MemoryRegionInfo Region, byte[] Data)> _last = [];
     private List<ulong> _candidates = [];
     private readonly Dictionary<ulong, byte[]> _frozen = new();
@@ -42,6 +43,7 @@ public sealed class CheatEngine(IDosSession session)
 
         foreach (var (region, data) in snap)
         {
+            _log?.Invoke($"  region guest=0x{region.GuestStart:X} len={region.Length} dataLen={data.Length}");
             bool unknownOk = comparison == ScanComparison.Unknown && region.Length <= UnknownScanRegionCap;
             for (int off = 0; off + size <= data.Length; off++)
             {
@@ -59,6 +61,7 @@ public sealed class CheatEngine(IDosSession session)
 
         _last = snap;
         _candidates = found;
+        _log?.Invoke($"FirstScan type={type} cmp={comparison} value={value?.ToString() ?? "(none)"} size={size} regions={snap.Count} -> {found.Count} candidates");
         return _candidates.Count;
     }
 
@@ -89,6 +92,7 @@ public sealed class CheatEngine(IDosSession session)
 
         _last = snap;
         _candidates = kept;
+        _log?.Invoke($"NextScan type={type} cmp={comparison} value={value?.ToString() ?? "(none)"} -> {kept.Count} candidates");
         return _candidates.Count;
     }
 
@@ -150,6 +154,10 @@ public sealed class CheatEngine(IDosSession session)
     private IReadOnlyList<(MemoryRegionInfo, byte[])> Snap()
     {
         var raw = _session.SnapshotMemory();
+        long total = 0;
+        foreach (var (_, data) in raw)
+            total += data.Length;
+        _log?.Invoke($"snapshot: session returned {raw.Count} region(s), {total} bytes; MemoryRegions.Count={_session.MemoryRegions.Count}");
         var list = new List<(MemoryRegionInfo, byte[])>(raw.Count);
         foreach (var (region, data) in raw)
             list.Add((new MemoryRegionInfo(region.GuestStart, region.Length), data));
