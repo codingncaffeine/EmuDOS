@@ -58,6 +58,7 @@ public partial class PreferencesWindow : Window
         HotkeySlowMotion.Text = Display(services.Settings.SlowMotionKey, "F7");
         HotkeyRewind.Text = Display(services.Settings.RewindKey, "F4");
         HotkeyPause.Text = Display(services.Settings.PauseKey, "Pause");
+        HotkeyShaderCycle.Text = Display(services.Settings.ShaderCycleKey, "F3");
 
         VersionText.Text = $"Version {UpdateService.CurrentVersion}";
         CheckUpdatesBox.IsChecked = services.Settings.CheckForUpdates;
@@ -241,6 +242,7 @@ public partial class PreferencesWindow : Window
         _services.Settings.SlowMotionKey = HotkeySlowMotion.Text.Trim();
         _services.Settings.RewindKey = HotkeyRewind.Text.Trim();
         _services.Settings.PauseKey = HotkeyPause.Text.Trim();
+        _services.Settings.ShaderCycleKey = HotkeyShaderCycle.Text.Trim();
         _services.SettingsStore.Save(_services.Settings);
         Set(HotkeysStatus, "Saved — applies next launch.", Success);
     }

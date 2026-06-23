@@ -51,6 +51,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _slowMotionKey;
     private readonly Key _pauseKey;
     private readonly Key _rewindKey;
+    private readonly Key _shaderCycleKey;
+    private EmuDOS.Effects.VideoShader _shader;
     private bool _isPaused;
     private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
@@ -105,6 +107,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _slowMotionKey = ParseKey(settings.SlowMotionKey, Key.F7);
         _pauseKey = ParseKey(settings.PauseKey, Key.Pause);
         _rewindKey = ParseKey(settings.RewindKey, Key.F4);
+        _shaderCycleKey = ParseKey(settings.ShaderCycleKey, Key.F3);
+        _shader = EmuDOS.Effects.VideoShaders.Parse(settings.VideoShader);
         // Holding fast-forward/slow-motion/rewind across a focus change would otherwise stick; reset it.
         Deactivated += (_, _) => { _session?.SetSpeed(1.0); _session?.SetRewinding(false); };
 
@@ -367,6 +371,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             {
                 _bitmap = new WriteableBitmap(_frameWidth, _frameHeight, 96, 96, PixelFormats.Bgr32, null);
                 Screen.Source = _bitmap;
+                ApplyShader(); // (re)build the CRT effect at the new source resolution
             }
 
             _bitmap.WritePixels(
@@ -480,6 +485,13 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (effective == _rewindKey)
         {
             _session.SetRewinding(true); // hold to rewind
+            e.Handled = true;
+            return;
+        }
+        if (effective == _shaderCycleKey)
+        {
+            if (!e.IsRepeat)
+                CycleShader();
             e.Handled = true;
             return;
         }
@@ -655,6 +667,21 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             '(' => (DosKey.D9, true),
             _ => null,
         };
+    }
+
+    // Apply the current CRT shader to the video Image, sized to the source resolution (null = off).
+    private void ApplyShader() =>
+        Screen.Effect = EmuDOS.Effects.VideoShaders.Create(_shader, _frameWidth, _frameHeight);
+
+    // Cycle Off -> Scanlines -> CRT live, show the name, and remember it as the default.
+    private void CycleShader()
+    {
+        _shader = EmuDOS.Effects.VideoShaders.Next(_shader);
+        ApplyShader();
+        ShowHint($"Shader: {EmuDOS.Effects.VideoShaders.DisplayName(_shader)}", 1.2);
+        var services = ((App)Application.Current).Services;
+        services.Settings.VideoShader = _shader.ToString();
+        services.SettingsStore.Save(services.Settings);
     }
 
     private void TogglePause()

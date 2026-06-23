@@ -70,6 +70,12 @@ public sealed class UserSettings
     /// <summary>Hold to rewind the game through recently captured states.</summary>
     public string RewindKey { get; set; } = "F4";
 
+    /// <summary>Cycle the in-game CRT video shader (Off / Scanlines / CRT).</summary>
+    public string ShaderCycleKey { get; set; } = "F3";
+
+    /// <summary>The CRT video shader applied to games: "Off", "Scanlines", or "Crt".</summary>
+    public string VideoShader { get; set; } = "Off";
+
     // --- Cloud save sync (GitHub). ---
 
     /// <summary>GitHub OAuth access token from the device-flow login (empty = not connected).</summary>
