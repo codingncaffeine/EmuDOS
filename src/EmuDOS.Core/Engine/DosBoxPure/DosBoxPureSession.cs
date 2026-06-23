@@ -26,6 +26,7 @@ public sealed class DosBoxPureSession : IDosSession
     private readonly ConcurrentQueue<Action> _pending = new();
     private volatile IReadOnlyDictionary<ulong, byte[]>? _frozen; // cheat freeze set (swapped wholesale)
     private byte[]? _initialState; // a save state to restore once the game has booted (launch-into-state)
+    private volatile int _speedPermil = 1000; // run speed ×1000 (1000 = normal); fast-forward / slow-motion
 
     private Thread? _thread;
     private LibretroCore? _core;
@@ -119,6 +120,9 @@ public sealed class DosBoxPureSession : IDosSession
 
     /// <summary>Restore this save state shortly after launch (set before <see cref="Start"/>).</summary>
     public void SetInitialState(byte[] state) => _initialState = state;
+
+    /// <summary>Set the run-speed multiplier (1.0 = normal; &gt;1 fast-forward, &lt;1 slow-motion).</summary>
+    public void SetSpeed(double multiplier) => _speedPermil = Math.Clamp((int)(multiplier * 1000), 100, 16000);
 
     public void Dispose()
     {
@@ -241,6 +245,7 @@ public sealed class DosBoxPureSession : IDosSession
         // against a live core + the host's audio sink.
         var sw = Stopwatch.StartNew();
         long frame = 0;
+        double targetMs = 0; // accumulated target wall-clock; advances by the speed-scaled frame time
         while (_running)
         {
             DrainPending();
@@ -249,6 +254,7 @@ public sealed class DosBoxPureSession : IDosSession
                 Thread.Sleep(8);
                 sw.Restart();
                 frame = 0;
+                targetMs = 0;
                 continue;
             }
 
@@ -268,13 +274,17 @@ public sealed class DosBoxPureSession : IDosSession
                 foreach (var kv in frozen)
                     _core.WriteMemory(kv.Key, kv.Value);
 
-            double behindMs = sw.Elapsed.TotalMilliseconds - (frame * frameMs);
+            // Advance the target clock by the speed-scaled frame time (fast-forward shrinks it, slow-
+            // motion grows it), then sleep to hit it. Resync if we fall badly behind.
+            targetMs += frameMs * 1000.0 / _speedPermil;
+            double behindMs = sw.Elapsed.TotalMilliseconds - targetMs;
             if (behindMs < -1)
                 Thread.Sleep((int)-behindMs);
             else if (behindMs > 250)
             {
-                sw.Restart(); // fell far behind; resync rather than fast-forward
+                sw.Restart();
                 frame = 0;
+                targetMs = 0;
             }
         }
     }

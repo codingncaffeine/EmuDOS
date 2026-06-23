@@ -47,6 +47,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _saveStateKey;
     private readonly Key _loadStateKey;
     private readonly Key _cheatKey;
+    private readonly Key _fastForwardKey;
+    private readonly Key _slowMotionKey;
+    private readonly Key _pauseKey;
+    private bool _isPaused;
     private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
     private static Key ParseKey(string name, Key fallback) => Enum.TryParse<Key>(name, out var k) ? k : fallback;
@@ -96,6 +100,11 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _saveStateKey = ParseKey(settings.SaveStateKey, Key.F5);
         _loadStateKey = ParseKey(settings.LoadStateKey, Key.F8);
         _cheatKey = ParseKey(settings.CheatKey, Key.F11);
+        _fastForwardKey = ParseKey(settings.FastForwardKey, Key.F6);
+        _slowMotionKey = ParseKey(settings.SlowMotionKey, Key.F7);
+        _pauseKey = ParseKey(settings.PauseKey, Key.Pause);
+        // Holding fast-forward/slow-motion across a focus change would otherwise stick; reset on deactivate.
+        Deactivated += (_, _) => _session?.SetSpeed(1.0);
 
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
@@ -446,6 +455,25 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
+        if (effective == _fastForwardKey)
+        {
+            _session.SetSpeed(4.0); // hold to fast-forward
+            e.Handled = true;
+            return;
+        }
+        if (effective == _slowMotionKey)
+        {
+            _session.SetSpeed(0.5); // hold to slow down
+            e.Handled = true;
+            return;
+        }
+        if (effective == _pauseKey)
+        {
+            if (!e.IsRepeat)
+                TogglePause();
+            e.Handled = true;
+            return;
+        }
 
         var key = KeyMap.ToDosKey(effective);
         if (key == DosKey.None)
@@ -517,6 +545,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
+        if (effective == _fastForwardKey || effective == _slowMotionKey)
+        {
+            _session.SetSpeed(1.0); // release returns to normal speed
+            e.Handled = true;
+            return;
+        }
 
         var key = KeyMap.ToDosKey(effective);
         if (key == DosKey.None)
@@ -529,6 +563,15 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (wasDown)
             _keyEvents.Enqueue(new KeyEvent(false, (uint)key, 0, Modifiers()));
         e.Handled = true;
+    }
+
+    private void TogglePause()
+    {
+        _isPaused = !_isPaused;
+        if (_isPaused)
+            _session.Pause();
+        else
+            _session.Resume();
     }
 
     private static ushort Modifiers()

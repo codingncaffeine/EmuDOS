@@ -213,6 +213,20 @@
                     <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0"
                                Text="Opens the in-game cheat engine (memory scanner / value editor)."/>
 
+                    <TextBlock Text="Fast-forward (hold)" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeyFastForward" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+
+                    <TextBlock Text="Slow-motion (hold)" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeySlowMotion" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+
+                    <TextBlock Text="Pause" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeyPause" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0"
+                               Text="Defaults (F6 / F7 / Pause) avoid common game keys. Rebind to the emulator-standard Space / E / P if you prefer."/>
+
                     <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                         <Button Content="Save" Click="OnSaveHotkeys" Padding="18,6"/>
                         <TextBlock x:Name="HotkeysStatus" Foreground="#9FE0A0" VerticalAlignment="Center" Margin="14,0,0,0"/>

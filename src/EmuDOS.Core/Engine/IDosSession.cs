@@ -64,4 +64,7 @@ public interface IDosSession : IDisposable
 
     /// <summary>Load this save state once the game has booted (used to launch straight into a state).</summary>
     void SetInitialState(byte[] state) { }
+
+    /// <summary>Set the run-speed multiplier (1.0 = normal; &gt;1 fast-forward, &lt;1 slow-motion).</summary>
+    void SetSpeed(double multiplier) { }
 }

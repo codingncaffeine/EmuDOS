@@ -58,6 +58,15 @@ public sealed class UserSettings
     /// <summary>Key that opens the in-game cheat engine.</summary>
     public string CheatKey { get; set; } = "F11";
 
+    /// <summary>Hold to fast-forward (run faster than real time). Default-safe vs game keys; remappable.</summary>
+    public string FastForwardKey { get; set; } = "F6";
+
+    /// <summary>Hold to slow the game down.</summary>
+    public string SlowMotionKey { get; set; } = "F7";
+
+    /// <summary>Toggle pause/resume of the running game.</summary>
+    public string PauseKey { get; set; } = "Pause";
+
     // --- Cloud save sync (GitHub). ---
 
     /// <summary>GitHub OAuth access token from the device-flow login (empty = not connected).</summary>

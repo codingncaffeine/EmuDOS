@@ -54,6 +54,9 @@ public partial class PreferencesWindow : Window
         HotkeySaveState.Text = Display(services.Settings.SaveStateKey, "F5");
         HotkeyLoadState.Text = Display(services.Settings.LoadStateKey, "F8");
         HotkeyCheat.Text = Display(services.Settings.CheatKey, "F11");
+        HotkeyFastForward.Text = Display(services.Settings.FastForwardKey, "F6");
+        HotkeySlowMotion.Text = Display(services.Settings.SlowMotionKey, "F7");
+        HotkeyPause.Text = Display(services.Settings.PauseKey, "Pause");
 
         VersionText.Text = $"Version {UpdateService.CurrentVersion}";
         CheckUpdatesBox.IsChecked = services.Settings.CheckForUpdates;
@@ -233,6 +236,9 @@ public partial class PreferencesWindow : Window
         _services.Settings.SaveStateKey = HotkeySaveState.Text.Trim();
         _services.Settings.LoadStateKey = HotkeyLoadState.Text.Trim();
         _services.Settings.CheatKey = HotkeyCheat.Text.Trim();
+        _services.Settings.FastForwardKey = HotkeyFastForward.Text.Trim();
+        _services.Settings.SlowMotionKey = HotkeySlowMotion.Text.Trim();
+        _services.Settings.PauseKey = HotkeyPause.Text.Trim();
         _services.SettingsStore.Save(_services.Settings);
         Set(HotkeysStatus, "Saved — applies next launch.", Success);
     }
