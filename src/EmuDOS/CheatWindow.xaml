@@ -1,0 +1,274 @@
+<Window x:Class="EmuDOS.CheatWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EmuDOS Cheat Engine" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="True" Width="1120" Height="640"
+        WindowStartupLocation="CenterScreen" FontFamily="Consolas" KeyDown="OnKeyDown"
+        TextOptions.TextFormattingMode="Display">
+
+    <Window.Resources>
+        <!-- Cyberpunk / System-Shock-diagnostic palette -->
+        <Color x:Key="ScreenColor">#07121A</Color>
+        <SolidColorBrush x:Key="Screen" Color="#07121A"/>
+        <SolidColorBrush x:Key="Panel" Color="#0A1C26"/>
+        <SolidColorBrush x:Key="NeonGreen" Color="#3BFF7D"/>
+        <SolidColorBrush x:Key="NeonCyan" Color="#33E6FF"/>
+        <SolidColorBrush x:Key="NeonMagenta" Color="#E24AB0"/>
+        <SolidColorBrush x:Key="NeonYellow" Color="#C6FF46"/>
+        <SolidColorBrush x:Key="BodyGreen" Color="#79FFB0"/>
+        <SolidColorBrush x:Key="BodyCyan" Color="#86F0FF"/>
+        <SolidColorBrush x:Key="Dim" Color="#3E7D74"/>
+        <SolidColorBrush x:Key="FieldBg" Color="#06222A"/>
+
+        <LinearGradientBrush x:Key="NeonEdge" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#3BFF7D" Offset="0"/>
+            <GradientStop Color="#33E6FF" Offset="0.55"/>
+            <GradientStop Color="#E24AB0" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="TitleBar" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#7A1E6B" Offset="0"/>
+            <GradientStop Color="#C42B8E" Offset="0.5"/>
+            <GradientStop Color="#7A1E6B" Offset="1"/>
+        </LinearGradientBrush>
+
+        <DropShadowEffect x:Key="GreenGlow" Color="#3BFF7D" BlurRadius="12" ShadowDepth="0" Opacity="0.85"/>
+        <DropShadowEffect x:Key="CyanGlow" Color="#33E6FF" BlurRadius="12" ShadowDepth="0" Opacity="0.85"/>
+        <DropShadowEffect x:Key="MagentaGlow" Color="#E24AB0" BlurRadius="14" ShadowDepth="0" Opacity="0.85"/>
+
+        <!-- Bracketed neon "button": [START SCAN] -->
+        <Style x:Key="NeonButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource NeonGreen}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,14,0"/>
+            <Setter Property="Effect" Value="{StaticResource GreenGlow}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock>
+                            <Run Text="["/><ContentPresenter/><Run Text="]"/>
+                        </TextBlock>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource NeonYellow}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- DOS-field textbox -->
+        <Style x:Key="NeonField" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource FieldBg}"/>
+            <Setter Property="Foreground" Value="{StaticResource BodyGreen}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource NeonGreen}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource NeonGreen}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource BodyGreen}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <!-- Monitor bezel -->
+    <Border Background="#23282B" CornerRadius="22" Padding="14">
+        <Border.Effect><DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="0" Opacity="0.9"/></Border.Effect>
+        <Border CornerRadius="14" ClipToBounds="True" BorderBrush="#11181C" BorderThickness="2">
+            <Grid>
+                <!-- Screen background + subtle radial glow -->
+                <Grid.Background>
+                    <RadialGradientBrush GradientOrigin="0.5,0.42" Center="0.5,0.42" RadiusX="0.75" RadiusY="0.85">
+                        <GradientStop Color="#0C1F2A" Offset="0"/>
+                        <GradientStop Color="#07121A" Offset="0.7"/>
+                        <GradientStop Color="#03080C" Offset="1"/>
+                    </RadialGradientBrush>
+                </Grid.Background>
+
+                <!-- Neon screen frame -->
+                <Border Margin="6" CornerRadius="8" BorderBrush="{StaticResource NeonEdge}" BorderThickness="2"
+                        Effect="{StaticResource MagentaGlow}"/>
+
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>   <!-- title bar -->
+                        <RowDefinition Height="Auto"/>   <!-- logo row -->
+                        <RowDefinition Height="*"/>      <!-- body -->
+                        <RowDefinition Height="Auto"/>   <!-- status bar -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Title bar -->
+                    <Border Grid.Row="0" Background="{StaticResource TitleBar}" CornerRadius="3" Height="26"
+                            MouseLeftButtonDown="OnTitleDrag" Effect="{StaticResource MagentaGlow}">
+                        <Grid>
+                            <TextBlock Text="EMUDOS — THE ULTIMATE DOS CHEAT ENGINE [v1.3]" Foreground="White"
+                                       FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock Text="✕" Foreground="White" FontWeight="Bold" Cursor="Hand"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"
+                                       MouseLeftButtonDown="OnClose"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Logo row -->
+                    <Grid Grid.Row="1" Margin="0,12,0,10">
+                        <TextBlock HorizontalAlignment="Left" VerticalAlignment="Center"
+                                   Foreground="{StaticResource NeonGreen}" Effect="{StaticResource GreenGlow}"
+                                   FontSize="30" FontWeight="Bold" Text="☠ DOS"/>
+                        <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11"
+                                   Foreground="{StaticResource Dim}" TextAlignment="Right"
+                                   Text="⌁ MEM-LINK ACTIVE&#x0a;◳ ◳ ◳ ◰ ◱ ◲"/>
+                    </Grid>
+
+                    <!-- Body: scanner/results | cheat table -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="330"/>
+                            <ColumnDefinition Width="18"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- LEFT column -->
+                        <Grid Grid.Column="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="12"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- MEMORY SCANNER -->
+                            <Border Grid.Row="0" Background="{StaticResource Panel}" BorderBrush="{StaticResource NeonGreen}"
+                                    BorderThickness="1.5" CornerRadius="3" Padding="14,18,14,14" Effect="{StaticResource GreenGlow}">
+                                <StackPanel>
+                                    <TextBlock Text="MEMORY SCANNER" Foreground="{StaticResource NeonGreen}" FontWeight="Bold"
+                                               Margin="0,-26,0,8" Background="{StaticResource Screen}" Padding="4,0" HorizontalAlignment="Left"/>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="START ADDRESS:" Style="{StaticResource Label}"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource NeonField}"/>
+                                    </Grid>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="END ADDRESS:" Style="{StaticResource Label}"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource NeonField}"/>
+                                    </Grid>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="VALUE TO FIND:" Style="{StaticResource Label}"/>
+                                        <TextBox Grid.Column="1" Style="{StaticResource NeonField}"/>
+                                    </Grid>
+                                    <TextBlock Text="[BYTE/WORD/DWORD/STRING/FLOAT]" Foreground="{StaticResource Dim}" Margin="0,2,0,6"/>
+                                    <TextBlock Text="SCAN TYPE:" Style="{StaticResource Label}" HorizontalAlignment="Left"/>
+                                    <TextBlock Text="[EXACT/INCREASED/DECREASED/CHANGED/UNKNOWN]" Foreground="{StaticResource Dim}" Margin="0,2,0,10"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="START SCAN" Style="{StaticResource NeonButton}"/>
+                                        <Button Content="NEXT SCAN" Style="{StaticResource NeonButton}"/>
+                                        <Button Content="UNDO SCAN" Style="{StaticResource NeonButton}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- RESULTS -->
+                            <Border Grid.Row="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource NeonGreen}"
+                                    BorderThickness="1.5" CornerRadius="3" Padding="14,18,14,14" Effect="{StaticResource GreenGlow}">
+                                <Grid>
+                                    <TextBlock Text="RESULTS" Foreground="{StaticResource NeonGreen}" FontWeight="Bold"
+                                               Margin="0,-26,0,0" Background="{StaticResource Screen}" Padding="4,0"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                    <Border Background="#143042" BorderBrush="{StaticResource NeonGreen}" BorderThickness="1"
+                                            VerticalAlignment="Top" Margin="0,4,0,0" Padding="6,3">
+                                        <TextBlock Text="[004A:B7C8 | 2F (47)]" Foreground="{StaticResource BodyGreen}"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <!-- RIGHT column: CHEAT TABLE with floating VALUE EDITOR -->
+                        <Border Grid.Column="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource NeonCyan}"
+                                BorderThickness="1.5" CornerRadius="3" Padding="16,18,16,14" Effect="{StaticResource CyanGlow}">
+                            <Grid>
+                                <StackPanel>
+                                    <TextBlock Text="CHEAT TABLE / CODES" Foreground="{StaticResource NeonCyan}" FontWeight="Bold"
+                                               Margin="0,-26,0,10" Background="{StaticResource Screen}" Padding="4,0" HorizontalAlignment="Left"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="1.3*"/><ColumnDefinition Width="0.8*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="ADDRESS (HEX)" Foreground="{StaticResource BodyCyan}"/>
+                                        <TextBlock Grid.Column="1" Text="CURRENT VALUE" Foreground="{StaticResource BodyCyan}"/>
+                                        <TextBlock Grid.Column="2" Text="NEW VALUE" Foreground="{StaticResource BodyCyan}"/>
+                                        <TextBlock Grid.Column="3" Text="DESCRIPTION" Foreground="{StaticResource BodyCyan}"/>
+                                        <TextBlock Grid.Column="4" Text="FREEZE (X)" Foreground="{StaticResource BodyCyan}"/>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource NeonCyan}" Opacity="0.4" Margin="0,6,0,0"/>
+                                </StackPanel>
+
+                                <!-- VALUE EDITING PANEL (floating) -->
+                                <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-2" Width="470"
+                                        Background="#08222C" BorderBrush="{StaticResource NeonCyan}" BorderThickness="1.5"
+                                        CornerRadius="3" Padding="16,18,16,14" Effect="{StaticResource CyanGlow}">
+                                    <StackPanel>
+                                        <TextBlock Text="VALUE EDITING PANEL" Foreground="{StaticResource NeonCyan}" FontWeight="Bold"
+                                                   Margin="0,-26,0,10" Background="#08222C" Padding="4,0" HorizontalAlignment="Left"/>
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="SELECTED ADDRESS:" Foreground="{StaticResource BodyCyan}"/>
+                                            <TextBlock Grid.Column="1" Text="004A:B7C8" Foreground="{StaticResource NeonCyan}" FontWeight="Bold"/>
+                                        </Grid>
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="CURRENT VALUE:" Foreground="{StaticResource BodyCyan}"/>
+                                            <TextBlock Grid.Column="1" Text="002F (47 Dec)" Foreground="{StaticResource NeonCyan}" FontWeight="Bold"/>
+                                        </Grid>
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="NEW VALUE (DEC):" Foreground="{StaticResource BodyCyan}"/>
+                                            <TextBox Grid.Column="1" Style="{StaticResource NeonField}" BorderBrush="{StaticResource NeonCyan}"
+                                                     Foreground="{StaticResource BodyCyan}" CaretBrush="{StaticResource NeonCyan}"/>
+                                        </Grid>
+                                        <Grid Margin="0,4,0,10">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="DESCRIPTION:" Foreground="{StaticResource BodyCyan}"/>
+                                            <TextBox Grid.Column="1" Style="{StaticResource NeonField}" BorderBrush="{StaticResource NeonCyan}"
+                                                     Foreground="{StaticResource Dim}" Text="(Add Description)"/>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Button Content="WRITE VALUE" Style="{StaticResource NeonButton}"
+                                                    Foreground="{StaticResource NeonYellow}"/>
+                                            <Button Content="ADD TO TABLE" Style="{StaticResource NeonButton}" Margin="14,0,0,0"
+                                                    Foreground="{StaticResource NeonCyan}" Effect="{StaticResource CyanGlow}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Status bar -->
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <TextBlock Text="C:\&gt; EMUDOS_ENG.EXE" Foreground="{StaticResource BodyGreen}" HorizontalAlignment="Left"/>
+                        <TextBlock Text="© 1998 EMUDOS SYSTEMS" Foreground="{StaticResource Dim}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </Grid>
+
+                <!-- CRT scanline overlay (non-interactive) -->
+                <Rectangle IsHitTestVisible="False" Opacity="0.10">
+                    <Rectangle.Fill>
+                        <DrawingBrush TileMode="Tile" Viewport="0,0,3,3" ViewportUnits="Absolute">
+                            <DrawingBrush.Drawing>
+                                <GeometryDrawing Brush="#000000">
+                                    <GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,3,1.4"/></GeometryDrawing.Geometry>
+                                </GeometryDrawing>
+                            </DrawingBrush.Drawing>
+                        </DrawingBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+            </Grid>
+        </Border>
+    </Border>
+</Window>

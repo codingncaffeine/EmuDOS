@@ -617,6 +617,7 @@ public partial class MainWindow : Window
         {
             ("Manage…", () => new ManageGameWindow(services, tile.Game) { Owner = this }.ShowDialog()),
             ("Rename from ScreenScraper…", () => RenameFromScreenScraper(tile)),
+            ("Cheats… (preview)", () => new CheatWindow { Owner = this }.Show()),
             ("Game preferences…", () => OpenOptions(tile)),
             ("Open in DOS", () => _ = LaunchGameAsync(tile, bootToDos: true)),
             ("Launch parameters…", () => EditLaunchParameters(tile)),
