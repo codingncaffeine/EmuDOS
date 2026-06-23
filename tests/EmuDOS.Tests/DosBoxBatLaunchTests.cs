@@ -22,12 +22,26 @@ public class DosBoxBatLaunchTests
     }
 
     [Fact]
-    public void Leaves_simple_games_to_the_normal_exe_pick()
+    public void Takes_over_when_the_bat_runs_a_program()
     {
         var dir = NewTempDir();
-        File.WriteAllText(Path.Combine(dir, "DOSBOX.BAT"), "@ECHO OFF\r\n@CD \\GAME\r\n@GAME.EXE\r\n");
+        // The heuristic can mis-pick a config tool here; the bat names the real game launcher.
+        File.WriteAllText(Path.Combine(dir, "DOSBOX.BAT"), "@ECHO OFF\r\n@CD \\pqswat\r\n@PQSWATForDOSBox.exe\r\n");
 
-        Assert.Null(DosBoxBatLaunch.TryParse(dir)); // no mount -> don't take over
+        var launch = DosBoxBatLaunch.TryParse(dir);
+
+        Assert.NotNull(launch);
+        Assert.Null(launch!.Executable);
+        Assert.Equal(new[] { "CD \\pqswat", "PQSWATForDOSBox.exe" }, launch.PreCommands);
+    }
+
+    [Fact]
+    public void Leaves_a_do_nothing_bat_to_the_normal_exe_pick()
+    {
+        var dir = NewTempDir();
+        File.WriteAllText(Path.Combine(dir, "DOSBOX.BAT"), "@ECHO OFF\r\n@CYCLES fixed 45000\r\n");
+
+        Assert.Null(DosBoxBatLaunch.TryParse(dir)); // no mount, nothing to run -> leave the exe pick
     }
 
     [Fact]
