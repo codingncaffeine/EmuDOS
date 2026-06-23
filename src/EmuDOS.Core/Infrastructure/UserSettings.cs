@@ -67,6 +67,9 @@ public sealed class UserSettings
     /// <summary>Toggle pause/resume of the running game.</summary>
     public string PauseKey { get; set; } = "Pause";
 
+    /// <summary>Hold to rewind the game through recently captured states.</summary>
+    public string RewindKey { get; set; } = "F4";
+
     // --- Cloud save sync (GitHub). ---
 
     /// <summary>GitHub OAuth access token from the device-flow login (empty = not connected).</summary>

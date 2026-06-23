@@ -50,6 +50,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _fastForwardKey;
     private readonly Key _slowMotionKey;
     private readonly Key _pauseKey;
+    private readonly Key _rewindKey;
     private bool _isPaused;
     private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
@@ -103,8 +104,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _fastForwardKey = ParseKey(settings.FastForwardKey, Key.F6);
         _slowMotionKey = ParseKey(settings.SlowMotionKey, Key.F7);
         _pauseKey = ParseKey(settings.PauseKey, Key.Pause);
-        // Holding fast-forward/slow-motion across a focus change would otherwise stick; reset on deactivate.
-        Deactivated += (_, _) => _session?.SetSpeed(1.0);
+        _rewindKey = ParseKey(settings.RewindKey, Key.F4);
+        // Holding fast-forward/slow-motion/rewind across a focus change would otherwise stick; reset it.
+        Deactivated += (_, _) => { _session?.SetSpeed(1.0); _session?.SetRewinding(false); };
 
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
@@ -467,6 +469,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
+        if (effective == _rewindKey)
+        {
+            _session.SetRewinding(true); // hold to rewind
+            e.Handled = true;
+            return;
+        }
         if (effective == _pauseKey)
         {
             if (!e.IsRepeat)
@@ -548,6 +556,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (effective == _fastForwardKey || effective == _slowMotionKey)
         {
             _session.SetSpeed(1.0); // release returns to normal speed
+            e.Handled = true;
+            return;
+        }
+        if (effective == _rewindKey)
+        {
+            _session.SetRewinding(false); // release stops rewinding
             e.Handled = true;
             return;
         }

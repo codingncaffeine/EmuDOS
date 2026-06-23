@@ -28,6 +28,13 @@ public sealed class DosBoxPureSession : IDosSession
     private byte[]? _initialState; // a save state to restore once the game has booted (launch-into-state)
     private volatile int _speedPermil = 1000; // run speed ×1000 (1000 = normal); fast-forward / slow-motion
 
+    // Rewind: a ring of recent serialized states, captured + replayed on the core thread only.
+    private const int RewindIntervalFrames = 12;             // ~5 snapshots/sec at 60fps
+    private const long RewindMaxBytes = 256L * 1024 * 1024;  // cap the buffer (states can be MBs each)
+    private readonly LinkedList<byte[]> _rewindBuffer = new();
+    private long _rewindBytes;
+    private volatile bool _rewinding;
+
     private Thread? _thread;
     private LibretroCore? _core;
     private volatile bool _running;
@@ -123,6 +130,24 @@ public sealed class DosBoxPureSession : IDosSession
 
     /// <summary>Set the run-speed multiplier (1.0 = normal; &gt;1 fast-forward, &lt;1 slow-motion).</summary>
     public void SetSpeed(double multiplier) => _speedPermil = Math.Clamp((int)(multiplier * 1000), 100, 16000);
+
+    /// <summary>Hold to rewind: replay the captured snapshot ring backwards.</summary>
+    public void SetRewinding(bool on) => _rewinding = on;
+
+    // Snapshot the current state into the rewind ring, dropping the oldest to stay under the byte cap.
+    private void CaptureRewindSnapshot()
+    {
+        var snap = _core!.SaveState();
+        if (snap is null)
+            return;
+        _rewindBuffer.AddLast(snap);
+        _rewindBytes += snap.Length;
+        while (_rewindBytes > RewindMaxBytes && _rewindBuffer.First is { } oldest)
+        {
+            _rewindBytes -= oldest.Value.Length;
+            _rewindBuffer.RemoveFirst();
+        }
+    }
 
     public void Dispose()
     {
@@ -258,21 +283,38 @@ public sealed class DosBoxPureSession : IDosSession
                 continue;
             }
 
-            _core!.Run();
-            frame++;
-
-            // Restore a launch-into-state save once the core's serialize is ready and the game has begun
-            // booting (the snapshot replaces the full machine, so it jumps straight to the saved game).
-            if (_initialState is { } st0 && frame == 30)
+            if (_rewinding)
             {
-                try { _core.LoadState(st0); } catch { /* size mismatch etc. — just run from boot */ }
-                _initialState = null;
+                // Step back through the snapshot ring (don't advance the game or capture).
+                if (_rewindBuffer.Last is { } back)
+                {
+                    try { _core!.LoadState(back.Value); } catch { /* skip a bad snapshot */ }
+                    _rewindBytes -= back.Value.Length;
+                    _rewindBuffer.RemoveLast();
+                }
             }
+            else
+            {
+                _core!.Run();
+                frame++;
 
-            // Re-apply frozen cheat values after the game updated them this frame.
-            if (_frozen is { Count: > 0 } frozen)
-                foreach (var kv in frozen)
-                    _core.WriteMemory(kv.Key, kv.Value);
+                // Restore a launch-into-state save once the core's serialize is ready and the game has
+                // begun booting (the snapshot replaces the full machine, jumping straight to the save).
+                if (_initialState is { } st0 && frame == 30)
+                {
+                    try { _core.LoadState(st0); } catch { /* size mismatch etc. — just run from boot */ }
+                    _initialState = null;
+                }
+
+                // Re-apply frozen cheat values after the game updated them this frame.
+                if (_frozen is { Count: > 0 } frozen)
+                    foreach (var kv in frozen)
+                        _core.WriteMemory(kv.Key, kv.Value);
+
+                // Periodically snapshot so the player can rewind.
+                if (frame % RewindIntervalFrames == 0)
+                    CaptureRewindSnapshot();
+            }
 
             // Advance the target clock by the speed-scaled frame time (fast-forward shrinks it, slow-
             // motion grows it), then sleep to hit it. Resync if we fall badly behind.
@@ -287,6 +329,9 @@ public sealed class DosBoxPureSession : IDosSession
                 targetMs = 0;
             }
         }
+
+        _rewindBuffer.Clear(); // free the snapshot ring on teardown
+        _rewindBytes = 0;
     }
 
     // Runs on the core thread, once per frame, before input is read: latch the mouse and push

@@ -56,6 +56,7 @@ public partial class PreferencesWindow : Window
         HotkeyCheat.Text = Display(services.Settings.CheatKey, "F11");
         HotkeyFastForward.Text = Display(services.Settings.FastForwardKey, "F6");
         HotkeySlowMotion.Text = Display(services.Settings.SlowMotionKey, "F7");
+        HotkeyRewind.Text = Display(services.Settings.RewindKey, "F4");
         HotkeyPause.Text = Display(services.Settings.PauseKey, "Pause");
 
         VersionText.Text = $"Version {UpdateService.CurrentVersion}";
@@ -238,6 +239,7 @@ public partial class PreferencesWindow : Window
         _services.Settings.CheatKey = HotkeyCheat.Text.Trim();
         _services.Settings.FastForwardKey = HotkeyFastForward.Text.Trim();
         _services.Settings.SlowMotionKey = HotkeySlowMotion.Text.Trim();
+        _services.Settings.RewindKey = HotkeyRewind.Text.Trim();
         _services.Settings.PauseKey = HotkeyPause.Text.Trim();
         _services.SettingsStore.Save(_services.Settings);
         Set(HotkeysStatus, "Saved — applies next launch.", Success);

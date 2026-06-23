@@ -221,6 +221,10 @@
                     <TextBox x:Name="HotkeySlowMotion" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
                              Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
 
+                    <TextBlock Text="Rewind (hold)" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
+                    <TextBox x:Name="HotkeyRewind" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
+                             Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>
+
                     <TextBlock Text="Pause" Style="{StaticResource FieldLabel}" Margin="0,12,0,0"/>
                     <TextBox x:Name="HotkeyPause" Width="200" HorizontalAlignment="Left" IsReadOnly="True"
                              Cursor="Hand" PreviewKeyDown="OnHotkeyCapture"/>

@@ -67,4 +67,7 @@ public interface IDosSession : IDisposable
 
     /// <summary>Set the run-speed multiplier (1.0 = normal; &gt;1 fast-forward, &lt;1 slow-motion).</summary>
     void SetSpeed(double multiplier) { }
+
+    /// <summary>Hold to rewind through recently captured states.</summary>
+    void SetRewinding(bool on) { }
 }
