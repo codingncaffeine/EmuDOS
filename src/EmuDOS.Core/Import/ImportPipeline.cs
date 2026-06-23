@@ -97,12 +97,23 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
                 EnsureMountableCue(box.ContentDir);
                 executables = FindExecutables(box.ContentDir);
 
+                // A pre-installed game records its auto-run target in AUTOBOOT.DBP (dosbox_pure's "set
+                // auto start"). Honor it: mount the content as C: and run that program. Without this, a
+                // game sitting next to its CD image — and nested deep enough that the exe scan misses it —
+                // is mistaken for a raw disc and dropped at the core's start menu. The bundled-disc
+                // staging further below then mounts its CD as D:.
+                if (AutobootDbp.TryParseExecutable(box.ContentDir) is { } autoStart)
+                {
+                    classification = ImportClassification.ReadyToPlay;
+                    chosen = autoStart;
+                    profile = new GameProfile { Title = title, SourceMedia = media, Launch = new LaunchSpec { Executable = chosen } };
+                }
                 // A zip/folder that is essentially just a CD image (a disc image present, with no
                 // loose game program to run) is a CD game to install. Treat it as one so it mounts
                 // via dosbox_pure's native disc loader — which reads long, spaced, multi-track
                 // cue/bin names host-side — and boots to its installer. The autoexec IMGMOUNT path
                 // can't open such filenames from inside the C: mount.
-                if (executables.Count == 0 && FindMountableDisc(box.ContentDir) is not null)
+                else if (executables.Count == 0 && FindMountableDisc(box.ContentDir) is not null)
                 {
                     media = SourceMediaType.Iso;
                     classification = ImportClassification.NeedsInstall;
