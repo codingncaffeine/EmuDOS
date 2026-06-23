@@ -187,8 +187,15 @@ public static class UpdateService
         try { File.Delete(zipPath); } catch { }
 
         progress?.Report("Restarting…");
-        Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true });
-        System.Windows.Application.Current.Shutdown();
+        // The awaits above used ConfigureAwait(false), so we're on a thread-pool thread now. Relaunch
+        // and shut down on the UI thread — Application.Shutdown() must run there, or it throws a
+        // cross-thread exception (even though the relaunch itself would still have happened).
+        var app = System.Windows.Application.Current;
+        app.Dispatcher.Invoke(() =>
+        {
+            Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true });
+            app.Shutdown();
+        });
     }
 
     /// <summary>Delete the leftover ".old"/".new" files from a previous self-update. Call at startup.</summary>
