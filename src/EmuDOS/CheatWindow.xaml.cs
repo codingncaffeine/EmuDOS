@@ -93,10 +93,12 @@ public partial class CheatWindow : Window
         if (_engine is null) { Beep("PREVIEW — OPEN IN A GAME WITH F11"); return; }
         double? value = ParseValue(ValueBox.Text, _type);
         if (_comparison == ScanComparison.Exact && value is null) { Beep("ENTER A VALUE"); return; }
-        _log.Info($"START SCAN: typedText='{ValueBox.Text}' type={_type} cmp={_comparison} parsed={value?.ToString() ?? "null"}");
+        ulong? start = ParseAddr(StartBox.Text);
+        ulong? end = ParseAddr(EndBox.Text);
+        _log.Info($"START SCAN: typedText='{ValueBox.Text}' type={_type} cmp={_comparison} parsed={value?.ToString() ?? "null"} range=[{StartBox.Text}..{EndBox.Text}]");
         Beep("SCANNING…");
         var (engine, type, cmp) = (_engine, _type, _comparison);
-        int n = await Task.Run(() => engine.FirstScan(type, cmp, value)); // off the UI thread
+        int n = await Task.Run(() => engine.FirstScan(type, cmp, value, start, end)); // off the UI thread
         AfterScan(n);
     }
 
@@ -255,6 +257,17 @@ public partial class CheatWindow : Window
         long l = (long)v;
         int width = CheatEngine.SizeOf(type) * 2;
         return $"{l.ToString("X" + width, CultureInfo.InvariantCulture)} ({l})";
+    }
+
+    // Addresses are hex (matching the table/results display, e.g. "004A:B7C8" or "4AB7C8"). Empty = unbounded.
+    private static ulong? ParseAddr(string text)
+    {
+        text = (text ?? string.Empty).Trim().Replace(":", "");
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            text = text[2..];
+        if (text.Length == 0)
+            return null;
+        return ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var a) ? a : null;
     }
 
     private static double? ParseValue(string text, ScanValueType type)

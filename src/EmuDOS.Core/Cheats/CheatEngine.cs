@@ -35,7 +35,8 @@ public sealed class CheatEngine(IDosSession session, Action<string>? log = null)
 
     /// <summary>First scan: EXACT (needs a value) collects every matching address; UNKNOWN seeds every
     /// address in the small regions as a candidate to narrow later. Returns the candidate count.</summary>
-    public int FirstScan(ScanValueType type, ScanComparison comparison, double? value)
+    public int FirstScan(ScanValueType type, ScanComparison comparison, double? value,
+                         ulong? rangeStart = null, ulong? rangeEnd = null)
     {
         var snap = Snap();
         int size = SizeOf(type);
@@ -43,25 +44,34 @@ public sealed class CheatEngine(IDosSession session, Action<string>? log = null)
 
         foreach (var (region, data) in snap)
         {
-            _log?.Invoke($"  region guest=0x{region.GuestStart:X} len={region.Length} dataLen={data.Length}");
-            bool unknownOk = comparison == ScanComparison.Unknown && region.Length <= UnknownScanRegionCap;
-            for (int off = 0; off + size <= data.Length; off++)
+            // Clip the region to the optional [rangeStart, rangeEnd] guest-address window.
+            ulong regionStart = region.GuestStart;
+            ulong regionEnd = regionStart + (ulong)data.Length;
+            ulong lo = rangeStart is { } rs && rs > regionStart ? rs : regionStart;
+            ulong hi = rangeEnd is { } re && re < regionEnd ? re : regionEnd;
+            if (hi <= lo)
+                continue;
+            int startOff = (int)(lo - regionStart);
+            int endOff = (int)(hi - regionStart);
+            bool unknownOk = comparison == ScanComparison.Unknown
+                          && (ulong)(endOff - startOff) <= UnknownScanRegionCap;
+            for (int off = startOff; off + size <= endOff; off++)
             {
                 if (comparison == ScanComparison.Exact && value is { } v)
                 {
                     if (ReadValue(data, off, type) == v)
-                        found.Add(region.GuestStart + (ulong)off);
+                        found.Add(regionStart + (ulong)off);
                 }
                 else if (unknownOk)
                 {
-                    found.Add(region.GuestStart + (ulong)off);
+                    found.Add(regionStart + (ulong)off);
                 }
             }
         }
 
         _last = snap;
         _candidates = found;
-        _log?.Invoke($"FirstScan type={type} cmp={comparison} value={value?.ToString() ?? "(none)"} size={size} regions={snap.Count} -> {found.Count} candidates");
+        _log?.Invoke($"FirstScan type={type} cmp={comparison} value={value?.ToString() ?? "(none)"} size={size} range=[{(rangeStart?.ToString("X") ?? "all")}..{(rangeEnd?.ToString("X") ?? "all")}] regions={snap.Count} -> {found.Count} candidates");
         return _candidates.Count;
     }
 
