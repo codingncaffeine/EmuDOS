@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -30,6 +32,7 @@ public partial class CheatWindow : Window
     public CheatWindow() : this(null) { }
 
     private readonly EmuDOS.Core.Infrastructure.AppLog _log;
+    private readonly string? _cheatsPath; // per-game cheats.json (null in preview)
 
     public CheatWindow(IDosSession? session)
     {
@@ -40,10 +43,15 @@ public partial class CheatWindow : Window
         if (session is not null)
             _engine = new CheatEngine(session, _log.Info);
 
+        _cheatsPath = session is not null
+            ? Path.Combine(session.Instance.GameboxPath, "cheats.json")
+            : null;
+
         ResultsList.DisplayMemberPath = nameof(ResultView.Display);
         CheatTable.ItemsSource = _rows;
         HighlightSelector(TypeSelector, _type.ToString());
         HighlightSelector(ScanSelector, _comparison.ToString());
+        LoadCheats();
 
         if (_engine is null)
             StatusText.Text = "⌁ PREVIEW — LAUNCH A GAME & PRESS F11 TO USE";
@@ -150,6 +158,7 @@ public partial class CheatWindow : Window
             NewValue = string.IsNullOrWhiteSpace(EditValueBox.Text) ? ((long)cur).ToString(CultureInfo.InvariantCulture) : EditValueBox.Text.Trim(),
             Description = string.IsNullOrWhiteSpace(EditDescBox.Text) ? "—" : EditDescBox.Text.Trim(),
         });
+        SaveCheats();
     }
 
     private void OnFreezeChanged(object sender, RoutedEventArgs e)
@@ -157,6 +166,7 @@ public partial class CheatWindow : Window
         if (_engine is null || sender is not CheckBox { DataContext: CheatRow row })
             return;
         var target = ParseValue(row.NewValue, row.Type) ?? _engine.ReadLive(row.AddressValue, row.Type) ?? 0;
+        _log.Info($"FREEZE {(row.Freeze ? "ON" : "OFF")} addr=0x{row.AddressValue:X} type={row.Type} newValueText='{row.NewValue}' target={target}");
         _engine.SetFreeze(row.AddressValue, row.Type, target, row.Freeze);
     }
 
@@ -177,6 +187,48 @@ public partial class CheatWindow : Window
     }
 
     private void Beep(string msg) => StatusText.Text = "⌁ " + msg;
+
+    // ── per-game persistence (cheats.json in the gamebox) ──
+
+    private void LoadCheats()
+    {
+        if (_cheatsPath is null || !File.Exists(_cheatsPath))
+            return;
+        try
+        {
+            var entries = JsonSerializer.Deserialize<List<CheatEntry>>(File.ReadAllText(_cheatsPath));
+            if (entries is null)
+                return;
+            foreach (var en in entries)
+            {
+                var cur = _engine?.ReadLive(en.Address, en.Type);
+                _rows.Add(new CheatRow
+                {
+                    Address = FormatAddr(en.Address),
+                    AddressValue = en.Address,
+                    Type = en.Type,
+                    NewValue = en.NewValue ?? "",
+                    Description = string.IsNullOrWhiteSpace(en.Description) ? "—" : en.Description,
+                    CurrentValue = cur is { } v ? FormatValue(v, en.Type) : "—",
+                    // Freeze is left OFF on load — re-tick it to re-activate (avoids writing a stale value).
+                });
+            }
+            _log.Info($"loaded {_rows.Count} saved cheat(s)");
+        }
+        catch (Exception ex) { _log.Info($"load cheats failed: {ex.Message}"); }
+    }
+
+    private void SaveCheats()
+    {
+        if (_cheatsPath is null)
+            return;
+        try
+        {
+            var entries = _rows.Select(r => new CheatEntry(r.AddressValue, r.Type, r.NewValue, r.Description)).ToList();
+            File.WriteAllText(_cheatsPath, JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (Exception ex) { _log.Info($"save cheats failed: {ex.Message}"); }
+    }
 
     // ── formatting / parsing ──
 
@@ -224,11 +276,14 @@ public partial class CheatWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _timer.Stop();
+        SaveCheats(); // capture any edits to NewValue/description before closing
         _engine?.ClearAllFreezes(); // release any frozen values so they don't stick after the window closes
         base.OnClosed(e);
     }
 
     private sealed record ResultView(ulong Address, string Display);
+
+    private sealed record CheatEntry(ulong Address, ScanValueType Type, string NewValue, string Description);
 }
 
 /// <summary>One row in the cheat table (live current value + a freeze toggle).</summary>
