@@ -155,19 +155,36 @@ public sealed class GitHubSyncService
                 return new CloudSyncResult(0, 0, "Couldn't access or create the sync repo.");
             }
 
+            // Skip re-uploading files whose content hasn't changed since the last sync. gzip carries a
+            // timestamp and encryption uses a random nonce, so the remote blob isn't comparable — track
+            // a local hash of the RAW (pre-wrap) content instead. (Fixes re-pushing the same saves/DB
+            // every launch.) The manifest is local-only, next to the DB.
+            var manifestPath = Path.Combine(Path.GetDirectoryName(dbPath) ?? string.Empty, "cloud-sync-state.json");
+            var manifest = LoadManifest(manifestPath);
+
+            async Task<bool> PutIfChanged(string repoPath, byte[] rawForHash, Func<byte[]> makeUpload)
+            {
+                var hash = Sha256Hex(rawForHash);
+                if (manifest.TryGetValue(repoPath, out var prev) && prev == hash)
+                    return false; // unchanged since last sync
+                if (await PutAsync(token, login, repo, repoPath, makeUpload(), ct).ConfigureAwait(false))
+                {
+                    manifest[repoPath] = hash;
+                    return true;
+                }
+                return false;
+            }
+
             // Push the library database (gzip'd snapshot). Read with shared access — SQLite keeps the
             // live DB file open, so a plain read would fail with "in use by another process".
             if (File.Exists(dbPath))
             {
                 progress?.Report("Uploading library database…");
-                if (await PutAsync(token, login, repo, "db/library.db.gz", Wrap(Gzip(ReadShared(dbPath))), ct).ConfigureAwait(false))
+                var dbBytes = ReadShared(dbPath);
+                if (await PutIfChanged("db/library.db.gz", dbBytes, () => Wrap(Gzip(dbBytes))).ConfigureAwait(false))
                 {
                     up++;
                     _log("Uploaded library database.");
-                }
-                else
-                {
-                    _log("WARN: library database upload failed.");
                 }
             }
 
@@ -207,20 +224,24 @@ public sealed class GitHubSyncService
                     var full = Path.Combine(contentDir, rel.Replace('/', Path.DirectorySeparatorChar));
                     if (!File.Exists(full))
                         continue;
-                    var repoPath = $"ingame/{name}/{rel}";
-                    if (await PutAsync(token, login, repo, repoPath, Wrap(File.ReadAllBytes(full)), ct).ConfigureAwait(false))
+                    var bytes = File.ReadAllBytes(full);
+                    if (await PutIfChanged($"ingame/{name}/{rel}", bytes, () => Wrap(bytes)).ConfigureAwait(false))
                     { up++; ingameUp++; }
-                    else
-                        _log($"WARN: upload failed for {repoPath}");
                 }
 
-                bool notesUp = File.Exists(notes) &&
-                    await PutAsync(token, login, repo, $"notes/{name}.md", Wrap(File.ReadAllBytes(notes)), ct).ConfigureAwait(false);
-                if (notesUp)
-                    up++;
+                bool notesUp = false;
+                if (File.Exists(notes))
+                {
+                    var nb = File.ReadAllBytes(notes);
+                    notesUp = await PutIfChanged($"notes/{name}.md", nb, () => Wrap(nb)).ConfigureAwait(false);
+                    if (notesUp)
+                        up++;
+                }
                 if (gameUp > 0 || ingameUp > 0 || notesUp)
                     _log($"Pushed {name}: {gameUp} state(s), {ingameUp} save(s){(notesUp ? " + notes" : "")}.");
             }
+
+            SaveManifest(manifestPath, manifest);
 
             // Per-game pull: state files and notes that exist in the repo but not locally (additive,
             // only into games that exist locally).
@@ -421,6 +442,28 @@ public sealed class GitHubSyncService
 
     private static string EscapePath(string path) =>
         string.Join('/', path.Split('/').Select(Uri.EscapeDataString));
+
+    private static string Sha256Hex(byte[] data) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data));
+
+    // Local-only record of the content hash last uploaded per repo path, so unchanged files are skipped.
+    private static Dictionary<string, string> LoadManifest(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
+                       ?? new(StringComparer.Ordinal);
+        }
+        catch { }
+        return new(StringComparer.Ordinal);
+    }
+
+    private static void SaveManifest(string path, Dictionary<string, string> manifest)
+    {
+        try { File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(manifest)); }
+        catch { /* the manifest is an optimization; losing it just means a re-upload next time */ }
+    }
 
     // Read a file that another process may hold open (e.g. SQLite's live DB) by allowing shared R/W.
     private static byte[] ReadShared(string path)
