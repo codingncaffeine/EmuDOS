@@ -25,6 +25,7 @@ public sealed class DosBoxPureSession : IDosSession
     private readonly string _systemDir;
     private readonly ConcurrentQueue<Action> _pending = new();
     private volatile IReadOnlyDictionary<ulong, byte[]>? _frozen; // cheat freeze set (swapped wholesale)
+    private byte[]? _initialState; // a save state to restore once the game has booted (launch-into-state)
 
     private Thread? _thread;
     private LibretroCore? _core;
@@ -115,6 +116,9 @@ public sealed class DosBoxPureSession : IDosSession
 
     /// <summary>Swap in a fresh frozen set; it's re-applied every frame on the core thread.</summary>
     public void SetFrozen(IReadOnlyDictionary<ulong, byte[]>? frozen) => _frozen = frozen;
+
+    /// <summary>Restore this save state shortly after launch (set before <see cref="Start"/>).</summary>
+    public void SetInitialState(byte[] state) => _initialState = state;
 
     public void Dispose()
     {
@@ -250,6 +254,14 @@ public sealed class DosBoxPureSession : IDosSession
 
             _core!.Run();
             frame++;
+
+            // Restore a launch-into-state save once the core's serialize is ready and the game has begun
+            // booting (the snapshot replaces the full machine, so it jumps straight to the saved game).
+            if (_initialState is { } st0 && frame == 30)
+            {
+                try { _core.LoadState(st0); } catch { /* size mismatch etc. — just run from boot */ }
+                _initialState = null;
+            }
 
             // Re-apply frozen cheat values after the game updated them this frame.
             if (_frozen is { Count: > 0 } frozen)

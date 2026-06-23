@@ -79,7 +79,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private DispatcherTimer? _hintTimer;
     private Point? _lastMouse;
 
-    public EmulatorWindow(IDosEngine engine, GameInstance instance, long gameId = 0)
+    public EmulatorWindow(IDosEngine engine, GameInstance instance, long gameId = 0, byte[]? initialState = null)
     {
         InitializeComponent();
         DarkChrome.Apply(this);
@@ -110,6 +110,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         }
 
         _session = engine.CreateSession(instance, this);
+        if (initialState is not null)
+            _session.SetInitialState(initialState); // restore this save state once the game has booted
         Loaded += OnLoadedGrabFocus;
         Activated += (_, _) => Keyboard.Focus(this);
     }

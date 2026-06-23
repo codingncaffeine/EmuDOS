@@ -61,4 +61,7 @@ public interface IDosSession : IDisposable
 
     /// <summary>Set the frozen values re-applied every frame (pass a fresh dictionary; null clears).</summary>
     void SetFrozen(IReadOnlyDictionary<ulong, byte[]>? frozen) { }
+
+    /// <summary>Load this save state once the game has booted (used to launch straight into a state).</summary>
+    void SetInitialState(byte[] state) { }
 }

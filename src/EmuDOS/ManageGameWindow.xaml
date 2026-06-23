@@ -68,6 +68,34 @@
             </Grid>
         </DataTemplate>
 
+        <!-- Save-state rows: Load (launch the game restored to this state) + Delete. -->
+        <DataTemplate x:Key="RowState">
+            <Grid Margin="2,4">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer" Click="OnShowInExplorer"/>
+                    </ContextMenu>
+                </Grid.ContextMenu>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="96" Height="60" Background="#22000000" Margin="0,0,10,0"
+                        CornerRadius="3" Visibility="{Binding ThumbVisibility}">
+                    <Image Source="{Binding Thumb}" Stretch="Uniform"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Primary}" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Secondary}" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Load" Margin="0,0,6,0" Padding="10,3" Click="OnLoadState"/>
+                    <Button Content="Delete" Padding="10,3" Click="OnDeleteRow"/>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
         <Style x:Key="EmptyHint" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
             <Setter Property="Margin" Value="4,12"/>
             <Setter Property="FontStyle" Value="Italic"/>
@@ -80,7 +108,7 @@
             <TabItem Header="Save states">
                 <Grid Margin="12,8">
                     <ListBox x:Name="StatesList" Background="Transparent" BorderThickness="0"
-                             ItemTemplate="{StaticResource RowDeleteOnly}"
+                             ItemTemplate="{StaticResource RowState}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              HorizontalContentAlignment="Stretch"/>
                     <TextBlock x:Name="StatesEmpty" Style="{StaticResource EmptyHint}"

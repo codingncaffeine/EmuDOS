@@ -68,8 +68,7 @@ public partial class MainWindow : Window
         preferences.Click += (_, _) => OpenOptions(tile);
 
         var manage = new MenuItem { Header = "Manage…" };
-        manage.Click += (_, _) =>
-            new ManageGameWindow(((App)Application.Current).Services, tile.Game) { Owner = this }.ShowDialog();
+        manage.Click += (_, _) => OpenManage(tile);
 
         var openInDos = new MenuItem { Header = "Open in DOS" };
         openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
@@ -616,7 +615,7 @@ public partial class MainWindow : Window
 
         var overflow = new List<(string, Action)>
         {
-            ("Manage…", () => new ManageGameWindow(services, tile.Game) { Owner = this }.ShowDialog()),
+            ("Manage…", () => OpenManage(tile)),
             ("Rename from ScreenScraper…", () => RenameFromScreenScraper(tile)),
             ("Cheats… (preview)", () => new CheatWindow { Owner = this }.Show()),
             ("Game preferences…", () => OpenOptions(tile)),
@@ -841,7 +840,18 @@ public partial class MainWindow : Window
             await LaunchGameAsync(Vm.Games[0]);
     }
 
-    private async Task LaunchGameAsync(GameTile tile, bool bootToDos = false, string? executableOverride = null)
+    // Open the per-game Manage window; if the user picks a save state to load, launch the game
+    // restored to it once the (modal) window closes.
+    private void OpenManage(GameTile tile)
+    {
+        var w = new ManageGameWindow(((App)Application.Current).Services, tile.Game) { Owner = this };
+        w.ShowDialog();
+        if (w.StateToLaunch is { } state && Core.Library.SaveStateStore.ReadState(state) is { } bytes)
+            _ = LaunchGameAsync(tile, loadState: bytes);
+    }
+
+    private async Task LaunchGameAsync(GameTile tile, bool bootToDos = false, string? executableOverride = null,
+                                       byte[]? loadState = null)
     {
         if (Vm is null)
             return;
@@ -903,7 +913,7 @@ public partial class MainWindow : Window
             services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir);
         services.Library.RecordPlay(tile.Id);
 
-        new EmulatorWindow(engine, instance, tile.Id) { Owner = this }.Show();
+        new EmulatorWindow(engine, instance, tile.Id, loadState) { Owner = this }.Show();
         Vm.ClearStatus();
     }
 }

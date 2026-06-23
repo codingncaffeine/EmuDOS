@@ -180,6 +180,19 @@ public partial class ManageGameWindow : Window
         }
     }
 
+    /// <summary>Set when the user clicks "Load" on a save state — the caller launches the game restored
+    /// to it once this (modal) window closes.</summary>
+    public SaveStateInfo? StateToLaunch { get; private set; }
+
+    private void OnLoadState(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Row { State: { } state })
+            return;
+        StateToLaunch = state;
+        DialogResult = true; // close; MainWindow launches the game with this state
+        Close();
+    }
+
     private void OnDeleteRow(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not Row row)
