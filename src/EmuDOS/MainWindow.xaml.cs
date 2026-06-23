@@ -13,6 +13,7 @@ using EmuDOS.Controls;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Engine.DosBoxPure;
 using EmuDOS.Core.Import;
+using EmuDOS.Core.Library;
 using EmuDOS.Core.Model;
 using EmuDOS.ViewModels;
 
@@ -63,30 +64,70 @@ public partial class MainWindow : Window
             return;
 
         var menu = new ContextMenu { PlacementTarget = element, Placement = PlacementMode.MousePoint };
+        var services = ((App)Application.Current).Services;
 
-        var preferences = new MenuItem { Header = "Preferences" };
+        // ── Play / favorite / quick-load ──
+        var play = new MenuItem { Header = "▶  Play" };
+        play.Click += async (_, _) => await LaunchGameAsync(tile);
+
+        var favorite = new MenuItem { Header = tile.IsFavorite ? "♥  Favorited" : "♡  Favorite" };
+        favorite.Click += (_, _) =>
+        {
+            tile.IsFavorite = !tile.IsFavorite;
+            services.Library.SetFavorite(tile.Id, tile.IsFavorite);
+        };
+
+        // Launch straight into a save state (same as the Manage window's Load button).
+        var loadState = new MenuItem { Header = "⏱  Load save state" };
+        var states = SaveStateStore.List(Path.Combine(tile.Game.GameboxPath, "saves"));
+        if (states.Count == 0)
+            loadState.Items.Add(new MenuItem { Header = "No save states yet", IsEnabled = false });
+        else
+            foreach (var st in states)
+            {
+                var captured = st;
+                var si = new MenuItem { Header = $"{st.Label ?? "Save state"} — {st.WhenUtc.ToLocalTime():g}" };
+                si.Click += async (_, _) =>
+                {
+                    var bytes = SaveStateStore.ReadState(captured);
+                    if (bytes is not null)
+                        await LaunchGameAsync(tile, loadState: bytes);
+                };
+                loadState.Items.Add(si);
+            }
+
+        // ── Configure / launch ──
+        var preferences = new MenuItem { Header = "⚙  Preferences" };
         preferences.Click += (_, _) => OpenOptions(tile);
 
-        var manage = new MenuItem { Header = "Manage…" };
+        var manage = new MenuItem { Header = "🛠  Manage…" };
         manage.Click += (_, _) => OpenManage(tile);
 
-        var openInDos = new MenuItem { Header = "Open in DOS" };
+        var openFolder = new MenuItem { Header = "📂  Open game folder" };
+        openFolder.Click += (_, _) =>
+        {
+            try { Process.Start(new ProcessStartInfo(tile.Game.GameboxPath) { UseShellExecute = true }); }
+            catch { /* folder may have been removed */ }
+        };
+
+        var openInDos = new MenuItem { Header = "🖥  Open in DOS" };
         openInDos.Click += async (_, _) => await LaunchGameAsync(tile, bootToDos: true);
 
-        var launchParams = new MenuItem { Header = "Launch parameters…" };
+        var launchParams = new MenuItem { Header = "⌨  Launch parameters…" };
         launchParams.Click += (_, _) => EditLaunchParameters(tile);
 
-        var boxArt = new MenuItem { Header = "Download box art" };
+        // ── Artwork / metadata ──
+        var boxArt = new MenuItem { Header = "🖼  Download box art" };
         boxArt.Click += async (_, _) => await (Vm?.DownloadArtAsync(tile) ?? Task.CompletedTask);
 
-        var box3D = new MenuItem { Header = "Download 3D box art" };
+        var box3D = new MenuItem { Header = "🧊  Download 3D box art" };
         box3D.Click += async (_, _) => await (Vm?.Download3DArtAsync(tile) ?? Task.CompletedTask);
 
-        var customArt = new MenuItem { Header = "Set box art from file…" };
+        var customArt = new MenuItem { Header = "📁  Set box art from file…" };
         customArt.Click += (_, _) => SetCustomArt(tile);
 
         // Per-game 2D/3D choice (overrides the global default; for when one style's art is poor).
-        var boxStyle = new MenuItem { Header = "Box style" };
+        var boxStyle = new MenuItem { Header = "🎴  Box style" };
         foreach (var (label, style) in new[]
                  {
                      ("Default (follow global)", BoxStyle.Default),
@@ -100,35 +141,24 @@ public partial class MainWindow : Window
             boxStyle.Items.Add(item);
         }
 
-        var manual = new MenuItem { Header = "Download manual" };
+        var rename = new MenuItem { Header = "✏  Rename from ScreenScraper…" };
+        rename.Click += (_, _) => RenameFromScreenScraper(tile);
+
+        var manual = new MenuItem { Header = "📖  Download manual" };
         manual.Click += async (_, _) => await DownloadManualAsync(tile);
 
+        menu.Items.Add(play);
+        menu.Items.Add(favorite);
+        menu.Items.Add(loadState);
+        menu.Items.Add(new Separator());
         menu.Items.Add(preferences);
         menu.Items.Add(manage);
+        menu.Items.Add(openFolder);
         menu.Items.Add(openInDos);
         menu.Items.Add(launchParams);
-        menu.Items.Add(boxArt);
-        menu.Items.Add(box3D);
-        menu.Items.Add(customArt);
-        menu.Items.Add(boxStyle);
-        menu.Items.Add(manual);
-
-        // For disc-based games (e.g. an installed Windows machine), let the user add more discs —
-        // each shows up in dosbox_pure's start menu to mount as D: (swap CDs without leaving the OS).
-        if (IsDiscGame(tile))
-        {
-            var addDisc = new MenuItem { Header = "Add disc…" };
-            addDisc.Click += (_, _) => AddDisc(tile);
-            menu.Items.Add(addDisc);
-
-            var addFromFolder = new MenuItem { Header = "Add disc from folder…" };
-            addFromFolder.Click += (_, _) => AddDiscFromFolder(tile);
-            menu.Items.Add(addFromFolder);
-        }
 
         // A clickable picker of executables we've used before plus any found in the content, so the
         // user can choose the game program (or a setup tool) instead of hunting through DOS.
-        var services = ((App)Application.Current).Services;
         var executables = OrderedExecutables(
             services.Store.ReadState(tile.Game.GameboxPath),
             ScanExecutables(Path.Combine(tile.Game.GameboxPath, "content")));
@@ -139,10 +169,47 @@ public partial class MainWindow : Window
                 executables.Add(installed);
         if (executables.Count > 0)
         {
-            var choose = new MenuItem { Header = "Choose program…" };
+            var choose = new MenuItem { Header = "📄  Choose program…" };
             choose.Click += (_, _) => ChooseProgram(tile, executables);
             menu.Items.Add(choose);
         }
+
+        // For disc-based games (e.g. an installed Windows machine), let the user add more discs —
+        // each shows up in dosbox_pure's start menu to mount as D: (swap CDs without leaving the OS).
+        if (IsDiscGame(tile))
+        {
+            var addDisc = new MenuItem { Header = "💿  Add disc…" };
+            addDisc.Click += (_, _) => AddDisc(tile);
+            menu.Items.Add(addDisc);
+
+            var addFromFolder = new MenuItem { Header = "💿  Add disc from folder…" };
+            addFromFolder.Click += (_, _) => AddDiscFromFolder(tile);
+            menu.Items.Add(addFromFolder);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(boxArt);
+        menu.Items.Add(box3D);
+        menu.Items.Add(customArt);
+        menu.Items.Add(boxStyle);
+        menu.Items.Add(rename);
+        menu.Items.Add(manual);
+
+        // ── Destructive (last) ──
+        menu.Items.Add(new Separator());
+        var delete = new MenuItem { Header = "🗑  Delete" };
+        delete.Click += (_, _) =>
+        {
+            if (Vm is null)
+                return;
+            var ok = MessageBox.Show(this,
+                $"Delete \"{tile.Title}\"?\n\nThis removes the game and its files — saves, save states and notes. " +
+                "Downloaded artwork is kept, so re-adding the game restores it. This can't be undone.",
+                "Delete game", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (ok == MessageBoxResult.OK)
+                Vm.DeleteGames(new[] { tile });
+        };
+        menu.Items.Add(delete);
 
         menu.IsOpen = true;
         e.Handled = true;
