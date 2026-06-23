@@ -55,6 +55,9 @@ public sealed class UserSettings
     /// <summary>Key that loads the quick save state for the running game.</summary>
     public string LoadStateKey { get; set; } = "F8";
 
+    /// <summary>Key that opens the in-game cheat engine.</summary>
+    public string CheatKey { get; set; } = "F11";
+
     // --- Cloud save sync (GitHub). ---
 
     /// <summary>GitHub OAuth access token from the device-flow login (empty = not connected).</summary>

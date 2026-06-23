@@ -52,6 +52,7 @@ public partial class PreferencesWindow : Window
         HotkeyMenu.Text = Display(services.Settings.MenuKey, "F10");
         HotkeySaveState.Text = Display(services.Settings.SaveStateKey, "F5");
         HotkeyLoadState.Text = Display(services.Settings.LoadStateKey, "F8");
+        HotkeyCheat.Text = Display(services.Settings.CheatKey, "F11");
 
         UpdateCloudUi();
 
@@ -226,6 +227,7 @@ public partial class PreferencesWindow : Window
         _services.Settings.MenuKey = HotkeyMenu.Text.Trim();
         _services.Settings.SaveStateKey = HotkeySaveState.Text.Trim();
         _services.Settings.LoadStateKey = HotkeyLoadState.Text.Trim();
+        _services.Settings.CheatKey = HotkeyCheat.Text.Trim();
         _services.SettingsStore.Save(_services.Settings);
         Set(HotkeysStatus, "Saved — applies next launch.", Success);
     }

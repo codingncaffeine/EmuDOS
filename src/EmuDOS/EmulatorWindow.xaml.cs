@@ -46,6 +46,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _menuKey;
     private readonly Key _saveStateKey;
     private readonly Key _loadStateKey;
+    private readonly Key _cheatKey;
     private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
     private static Key ParseKey(string name, Key fallback) => Enum.TryParse<Key>(name, out var k) ? k : fallback;
@@ -93,6 +94,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _menuKey = ParseKey(settings.MenuKey, Key.F10);
         _saveStateKey = ParseKey(settings.SaveStateKey, Key.F5);
         _loadStateKey = ParseKey(settings.LoadStateKey, Key.F8);
+        _cheatKey = ParseKey(settings.CheatKey, Key.F11);
 
         _log = new AppLog(((App)Application.Current).Services.Paths, "emulator.log");
         _log.Info($"Launch '{instance.Profile.Title}' exe={instance.Profile.Launch.Executable ?? "(autoexec)"}");
@@ -435,7 +437,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
-        if (effective == Key.F11)
+        if (effective == _cheatKey)
         {
             OpenCheats();
             e.Handled = true;
