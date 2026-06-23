@@ -306,9 +306,15 @@
         <TabItem Header="About">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="22,18">
-                    <TextBlock Text="EmuDOS" Style="{StaticResource Heading}" FontSize="20" Margin="0,0,0,2"/>
-                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,16"
-                               Text="A Boxer-style shelf for your DOS games, powered by the dosbox_pure libretro core."/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <Image Source="pack://application:,,,/Assets/EmuDOS.ico" Width="64" Height="64"
+                               VerticalAlignment="Top" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="EmuDOS" Style="{StaticResource Heading}" FontSize="20" Margin="0,0,0,2"/>
+                            <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap" MaxWidth="360"
+                                       Text="A Boxer-style shelf for your DOS games, powered by the dosbox_pure libretro core."/>
+                        </StackPanel>
+                    </StackPanel>
 
                     <TextBlock x:Name="VersionText" Style="{StaticResource Heading}" FontSize="13" Margin="0,0,0,2" Text="Version"/>
                     <TextBlock x:Name="LatestVersionText" Style="{StaticResource Muted}" FontSize="12" Margin="0,0,0,10"
