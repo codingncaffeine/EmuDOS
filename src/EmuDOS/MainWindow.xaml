@@ -104,15 +104,30 @@
             </Border>
         </ScrollViewer>
 
-        <!-- Status: hidden unless importing / downloading / a problem. -->
-        <Border Grid.Row="1" Background="{StaticResource BgSecondary}"
-                Visibility="{Binding ShowStatus, Converter={StaticResource BoolToVisibility}}">
-            <Grid Margin="14,6">
-                <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
-                <ProgressBar Width="120" Height="6" IsIndeterminate="True"
-                             HorizontalAlignment="Right"
-                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}"/>
-            </Grid>
-        </Border>
+        <StackPanel Grid.Row="1">
+            <!-- Update notice: shown when a newer release is on GitHub; click to open the download. -->
+            <Button Command="{Binding OpenUpdateCommand}" Cursor="Hand"
+                    Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVisibility}}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="#E03535" Padding="14,7">
+                            <TextBlock Text="{Binding UpdateMessage}" Foreground="White" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- Status: hidden unless importing / downloading / a problem. -->
+            <Border Background="{StaticResource BgSecondary}"
+                    Visibility="{Binding ShowStatus, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="14,6">
+                    <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                    <ProgressBar Width="120" Height="6" IsIndeterminate="True"
+                                 HorizontalAlignment="Right"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}"/>
+                </Grid>
+            </Border>
+        </StackPanel>
     </Grid>
 </Window>

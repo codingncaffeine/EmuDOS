@@ -34,6 +34,9 @@ public partial class App : Application
         if (Environment.GetEnvironmentVariable("EMUDOS_AUTOPLAY") == "1")
             await window.PlayFirstAsync();
 
+        // Check GitHub for a newer release and surface it in the bottom bar (best-effort, non-blocking).
+        _ = viewModel.CheckForUpdatesAsync();
+
         // Backfill covers for anything already on the shelf without one.
         await viewModel.FetchMissingArtAsync();
 

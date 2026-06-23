@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -53,6 +54,10 @@ public partial class PreferencesWindow : Window
         HotkeySaveState.Text = Display(services.Settings.SaveStateKey, "F5");
         HotkeyLoadState.Text = Display(services.Settings.LoadStateKey, "F8");
         HotkeyCheat.Text = Display(services.Settings.CheatKey, "F11");
+
+        VersionText.Text = $"Version {UpdateService.CurrentVersion}";
+        CheckUpdatesBox.IsChecked = services.Settings.CheckForUpdates;
+        _ = RefreshLatestVersionAsync(); // populate "latest on GitHub" when the window opens
 
         UpdateCloudUi();
 
@@ -483,5 +488,40 @@ public partial class PreferencesWindow : Window
     {
         target.Text = text;
         target.Foreground = brush;
+    }
+
+    // ── About tab ──────────────────────────────────────────────────────────────────────────
+    private async Task RefreshLatestVersionAsync()
+    {
+        var release = await UpdateService.LatestReleaseAsync();
+        if (release is null)
+        {
+            LatestVersionText.Text = "Latest on GitHub: couldn't check (offline?).";
+            return;
+        }
+        var tag = release.Tag.TrimStart('v', 'V');
+        LatestVersionText.Text = release.IsNewer
+            ? $"Latest on GitHub: {tag} — update available."
+            : $"Latest on GitHub: {tag} — you're up to date.";
+    }
+
+    private async void OnCheckForUpdates(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        LatestVersionText.Text = "Checking…";
+        await RefreshLatestVersionAsync();
+        CheckUpdatesButton.IsEnabled = true;
+    }
+
+    private void OnOpenReleases(object sender, RoutedEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(UpdateService.ReleasesUrl) { UseShellExecute = true }); }
+        catch { /* user can open it manually */ }
+    }
+
+    private void OnToggleCheckForUpdates(object sender, RoutedEventArgs e)
+    {
+        _services.Settings.CheckForUpdates = CheckUpdatesBox.IsChecked == true;
+        _services.SettingsStore.Save(_services.Settings);
     }
 }

@@ -72,4 +72,9 @@ public sealed class UserSettings
     /// <summary>Optional passphrase to encrypt cloud-synced save data (empty = no encryption). Protects
     /// the copy stored in the cloud repo; the same passphrase is needed on every PC that syncs.</summary>
     public string CloudEncryptionPassphrase { get; set; } = string.Empty;
+
+    // --- Updates. ---
+
+    /// <summary>Check GitHub for a newer release on startup and surface it in the status bar.</summary>
+    public bool CheckForUpdates { get; set; } = true;
 }

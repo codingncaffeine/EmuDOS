@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using EmuDOS.Core.Model;
 using EmuDOS.Services;
 
@@ -24,6 +26,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _showStatus;
+
+    [ObservableProperty]
+    private bool _updateAvailable;
+
+    [ObservableProperty]
+    private string _updateMessage = string.Empty;
+
+    private string _updateUrl = UpdateService.ReleasesUrl;
 
     [ObservableProperty]
     private bool _isEditMode;
@@ -135,6 +145,28 @@ public sealed partial class MainViewModel : ObservableObject
     {
         IsBusy = false;
         ShowStatus = false;
+    }
+
+    /// <summary>If enabled, check GitHub for a newer release and surface it in the bottom bar.</summary>
+    public async Task CheckForUpdatesAsync()
+    {
+        if (!_services.Settings.CheckForUpdates)
+            return;
+        var release = await UpdateService.LatestReleaseAsync().ConfigureAwait(true);
+        if (release is { IsNewer: true })
+        {
+            _updateUrl = release.Url;
+            UpdateMessage = $"Update available — EmuDOS {release.Tag.TrimStart('v', 'V')} (click to download)";
+            UpdateAvailable = true;
+        }
+    }
+
+    /// <summary>Open the release in the browser so the user can download it.</summary>
+    [RelayCommand]
+    private void OpenUpdate()
+    {
+        try { Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true }); }
+        catch { /* opening the browser is best-effort */ }
     }
 
     /// <summary>

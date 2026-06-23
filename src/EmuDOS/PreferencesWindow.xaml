@@ -302,5 +302,32 @@
                 </StackPanel>
             </ScrollViewer>
         </TabItem>
+
+        <TabItem Header="About">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="22,18">
+                    <TextBlock Text="EmuDOS" Style="{StaticResource Heading}" FontSize="20" Margin="0,0,0,2"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,16"
+                               Text="A Boxer-style shelf for your DOS games, powered by the dosbox_pure libretro core."/>
+
+                    <TextBlock x:Name="VersionText" Style="{StaticResource Heading}" FontSize="13" Margin="0,0,0,2" Text="Version"/>
+                    <TextBlock x:Name="LatestVersionText" Style="{StaticResource Muted}" FontSize="12" Margin="0,0,0,10"
+                               Text="Latest on GitHub: not checked yet."/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="CheckUpdatesButton" Content="Check for updates" Padding="14,6" Click="OnCheckForUpdates"/>
+                        <Button Content="Releases on GitHub" Padding="14,6" Margin="8,0,0,0" Click="OnOpenReleases"/>
+                    </StackPanel>
+
+                    <CheckBox x:Name="CheckUpdatesBox" Content="Check for updates on startup" Margin="0,14,0,0"
+                              Click="OnToggleCheckForUpdates"/>
+
+                    <Separator Margin="0,18,0,16" Background="{StaticResource BorderNormal}"/>
+
+                    <TextBlock Text="Credits" Style="{StaticResource Heading}" FontSize="13" Margin="0,0,0,6"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap"
+                               Text="Emulation by the dosbox_pure libretro core. Video playback via LibVLC (VideoLAN). Artwork and metadata from ScreenScraper."/>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
     </TabControl>
 </Window>
