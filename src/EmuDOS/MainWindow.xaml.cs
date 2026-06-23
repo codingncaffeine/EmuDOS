@@ -15,6 +15,7 @@ using EmuDOS.Core.Engine.DosBoxPure;
 using EmuDOS.Core.Import;
 using EmuDOS.Core.Library;
 using EmuDOS.Core.Model;
+using EmuDOS.Services;
 using EmuDOS.ViewModels;
 
 namespace EmuDOS;
@@ -144,8 +145,8 @@ public partial class MainWindow : Window
         var rename = new MenuItem { Header = "✏  Rename from ScreenScraper…" };
         rename.Click += (_, _) => RenameFromScreenScraper(tile);
 
-        var manual = new MenuItem { Header = "📖  Download manual" };
-        manual.Click += async (_, _) => await DownloadManualAsync(tile);
+        var manual = new MenuItem { Header = "📖  Read manual" };
+        manual.Click += async (_, _) => await OpenManualAsync(tile);
 
         menu.Items.Add(play);
         menu.Items.Add(favorite);
@@ -370,31 +371,51 @@ public partial class MainWindow : Window
         return ordered;
     }
 
-    private async Task DownloadManualAsync(GameTile tile)
+    private async Task OpenManualAsync(GameTile tile)
     {
         if (Vm is null)
             return;
 
         var services = ((App)Application.Current).Services;
-        Vm.Report($"Downloading manual for {tile.Title}…", busy: true);
-        try
+        var manual = FindManual(tile, services);
+        if (manual is null)
         {
-            var dir = Path.Combine(services.Paths.ManualsDir, SanitizeName(tile.Title));
-            var path = await services.Manuals.FetchManualAsync(tile.Title, dir);
-            if (path is null)
+            Vm.Report($"Downloading manual for {tile.Title}…", busy: true);
+            try
+            {
+                var dir = Path.Combine(services.Paths.ManualsDir, SanitizeName(tile.Title));
+                manual = await services.Manuals.FetchManualAsync(tile.Title, dir);
+            }
+            catch (Exception ex)
+            {
+                Vm.Report($"Manual download failed: {ex.Message}", busy: false);
+                return;
+            }
+            if (manual is null)
             {
                 Vm.Report($"No manual found for {tile.Title}.", busy: false);
                 return;
             }
+            Vm.ClearStatus();
+        }
 
-            Vm.Report($"Manual saved to {dir}", busy: false);
-            try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-            catch { /* no PDF handler — the file is saved regardless */ }
-        }
-        catch (Exception ex)
+        new ManualViewerWindow(manual, tile.Title) { Owner = this }.Show();
+    }
+
+    // An already-downloaded manual, or one bundled with the game (eXoDOS ships PDFs in the content).
+    private static string? FindManual(GameTile tile, AppServices services)
+    {
+        var dir = Path.Combine(services.Paths.ManualsDir, SanitizeName(tile.Title));
+        if (Directory.Exists(dir))
         {
-            Vm.Report($"Manual download failed: {ex.Message}", busy: false);
+            var downloaded = Directory.EnumerateFiles(dir, "manual.*").FirstOrDefault();
+            if (downloaded is not null)
+                return downloaded;
         }
+        var content = Path.Combine(tile.Game.GameboxPath, "content");
+        return Directory.Exists(content)
+            ? Directory.EnumerateFiles(content, "*.pdf", SearchOption.AllDirectories).FirstOrDefault()
+            : null;
     }
 
     private static string SanitizeName(string name)
@@ -689,7 +710,7 @@ public partial class MainWindow : Window
             ("Game preferences…", () => OpenOptions(tile)),
             ("Open in DOS", () => _ = LaunchGameAsync(tile, bootToDos: true)),
             ("Launch parameters…", () => EditLaunchParameters(tile)),
-            ("Download manual", () => _ = DownloadManualAsync(tile)),
+            ("Read manual", () => _ = OpenManualAsync(tile)),
         };
 
         var executables = OrderedExecutables(

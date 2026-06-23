@@ -11,6 +11,8 @@
     <!-- Bundled (not downloaded) for game-card video snaps. VLC/LibVLC is LGPL-2.1+ — credited in README/About. -->
     <PackageReference Include="LibVLCSharp" Version="3.9.6" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
+    <!-- In-app manual (PDF) viewer; renders via the Windows-provided Edge WebView2 runtime. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
   </ItemGroup>
 
   <!-- App-owned art embedded in the exe (the shelf backdrop). -->
