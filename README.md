@@ -16,6 +16,8 @@ Inspired by [Boxer](http://boxerapp.com/) for the Mac, built Windows-first.
 - **Discs & Windows** — multi-disc games, disc swapping, and installing/booting a full Windows 9x.
 - **Roland MT-32** — drop the ROMs in and MT-32 games use them, with an on-screen dot-matrix LCD.
 - **Save states**, **screenshots/recording**, **mouse lock**, and a **smart launcher** that picks the right program.
+- **Cloud save sync** — back up your save states and notes to your own private GitHub repo, with optional passphrase encryption, synced automatically at launch.
+- **CRT shaders** — optional scanline, shadow-mask/curved CRT, and green/amber monochrome-monitor looks, switched live in-game.
 
 See the **[Wiki](https://github.com/codingncaffeine/EmuDOS/wiki)** for the details on all of these.
 
@@ -54,6 +56,7 @@ EmuDOS stands on the work of others, with thanks:
 - **[libretro](https://www.libretro.com/)** — the core API EmuDOS hosts.
 - **[FFmpeg](https://ffmpeg.org/)** — optional gameplay video recording.
 - **[VLC / LibVLC](https://www.videolan.org/)** by VideoLAN — plays the game-card video snaps.
+- **[MAME](https://www.mamedev.org/)** — the CRT shader look (curvature, scanlines, shadow mask, vignette) is adapted from MAME's HLSL effects.
 - **[ScreenScraper](https://www.screenscraper.fr/)**, **[SteamGridDB](https://www.steamgriddb.com/)**, and the **[Internet Archive](https://archive.org/)** — box art and manuals.
 
 ## Third-party components
@@ -62,6 +65,7 @@ EmuDOS stands on the work of others, with thanks:
 - **FFmpeg** — GPL; downloaded on demand for the optional video-recording feature, never bundled.
 - **munt / mt32emu** — LGPL 2.1; compiled into our `emudos_mt32.dll` (source under `src/native/mt32`, rebuildable via `build.cmd`).
 - **LibVLC** — LGPL 2.1; bundled (via LibVLCSharp) to play the game-card video snaps.
+- **CRT shaders** — our own single-pass WPF/HLSL shaders, with the look adapted from **MAME's** HLSL effects (GPLv2+/BSD-3-Clause); no MAME code is bundled.
 - Box art / manuals come from **ScreenScraper**, **SteamGridDB**, and the **Internet Archive** via their APIs.
 
 > Rebuilding the bundled MT-32 synth DLL is covered in the [wiki](https://github.com/codingncaffeine/EmuDOS/wiki/How-It-Works#building-the-mt-32-shim-optional).
