@@ -106,7 +106,7 @@
 
         <StackPanel Grid.Row="1">
             <!-- Update notice: shown when a newer release is on GitHub; click to open the download. -->
-            <Button Command="{Binding OpenUpdateCommand}" Cursor="Hand"
+            <Button Command="{Binding InstallUpdateCommand}" Cursor="Hand"
                     Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVisibility}}">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">

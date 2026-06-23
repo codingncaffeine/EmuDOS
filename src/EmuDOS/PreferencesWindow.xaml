@@ -315,6 +315,8 @@
                                Text="Latest on GitHub: not checked yet."/>
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="CheckUpdatesButton" Content="Check for updates" Padding="14,6" Click="OnCheckForUpdates"/>
+                        <Button x:Name="UpdateNowButton" Content="Update now" Padding="14,6" Margin="8,0,0,0"
+                                Visibility="Collapsed" Click="OnUpdateNow"/>
                         <Button Content="Releases on GitHub" Padding="14,6" Margin="8,0,0,0" Click="OnOpenReleases"/>
                     </StackPanel>
 

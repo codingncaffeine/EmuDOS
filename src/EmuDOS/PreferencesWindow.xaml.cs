@@ -491,18 +491,48 @@ public partial class PreferencesWindow : Window
     }
 
     // ── About tab ──────────────────────────────────────────────────────────────────────────
+    private AppUpdate? _latestRelease;
+
     private async Task RefreshLatestVersionAsync()
     {
         var release = await UpdateService.LatestReleaseAsync();
+        _latestRelease = release;
         if (release is null)
         {
             LatestVersionText.Text = "Latest on GitHub: couldn't check (offline?).";
+            UpdateNowButton.Visibility = Visibility.Collapsed;
             return;
         }
         var tag = release.Tag.TrimStart('v', 'V');
         LatestVersionText.Text = release.IsNewer
             ? $"Latest on GitHub: {tag} — update available."
             : $"Latest on GitHub: {tag} — you're up to date.";
+        UpdateNowButton.Visibility = release.IsNewer ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnUpdateNow(object sender, RoutedEventArgs e)
+    {
+        if (_latestRelease is not { IsNewer: true } update)
+            return;
+        var ok = MessageBox.Show(this,
+            $"Download and install EmuDOS {update.Tag.TrimStart('v', 'V')} now?\nEmuDOS will restart to finish.",
+            "Update EmuDOS", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+        if (ok != MessageBoxResult.OK)
+            return;
+
+        UpdateNowButton.IsEnabled = false;
+        CheckUpdatesButton.IsEnabled = false;
+        var progress = new System.Progress<string>(s => LatestVersionText.Text = s);
+        try
+        {
+            await UpdateService.ApplyAsync(update, progress); // restarts on success
+        }
+        catch (System.Exception ex)
+        {
+            LatestVersionText.Text = $"Update failed: {ex.Message}";
+            UpdateNowButton.IsEnabled = true;
+            CheckUpdatesButton.IsEnabled = true;
+        }
     }
 
     private async void OnCheckForUpdates(object sender, RoutedEventArgs e)

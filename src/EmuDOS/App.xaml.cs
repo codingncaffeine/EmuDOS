@@ -13,6 +13,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         CrashLog.Install(this); // record unhandled exceptions (incl. failures during startup below)
+        UpdateService.CleanupOldFiles(); // sweep .old/.new left by a previous self-update
         Services = new AppServices();
         Core.Audio.Mt32Synth.RegisterNativeResolver(Services.Paths.CoresDir);
         var viewModel = new MainViewModel(Services);

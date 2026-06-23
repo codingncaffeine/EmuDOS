@@ -33,7 +33,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _updateMessage = string.Empty;
 
-    private string _updateUrl = UpdateService.ReleasesUrl;
+    private AppUpdate? _pendingUpdate;
 
     [ObservableProperty]
     private bool _isEditMode;
@@ -155,18 +155,40 @@ public sealed partial class MainViewModel : ObservableObject
         var release = await UpdateService.LatestReleaseAsync().ConfigureAwait(true);
         if (release is { IsNewer: true })
         {
-            _updateUrl = release.Url;
-            UpdateMessage = $"Update available — EmuDOS {release.Tag.TrimStart('v', 'V')} (click to download)";
+            _pendingUpdate = release;
+            UpdateMessage = $"Update available — EmuDOS {release.Tag.TrimStart('v', 'V')} (click to install)";
             UpdateAvailable = true;
         }
     }
 
-    /// <summary>Open the release in the browser so the user can download it.</summary>
+    /// <summary>Confirm, then download + install the update and restart. Falls back to the releases
+    /// page if the in-place install can't proceed.</summary>
     [RelayCommand]
-    private void OpenUpdate()
+    private async Task InstallUpdateAsync()
     {
-        try { Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true }); }
-        catch { /* opening the browser is best-effort */ }
+        var update = _pendingUpdate;
+        if (update is null)
+            return;
+
+        var ok = System.Windows.MessageBox.Show(
+            $"Download and install EmuDOS {update.Tag.TrimStart('v', 'V')} now?\nEmuDOS will restart to finish.",
+            "Update EmuDOS", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
+        if (ok != System.Windows.MessageBoxResult.OK)
+            return;
+
+        UpdateAvailable = false;
+        var progress = new Progress<string>(s => Report(s, busy: true));
+        try
+        {
+            await UpdateService.ApplyAsync(update, progress); // restarts on success
+        }
+        catch (Exception ex)
+        {
+            Report($"Update failed: {ex.Message}", busy: false);
+            UpdateAvailable = true; // surface the banner again so they can retry
+            try { Process.Start(new ProcessStartInfo(UpdateService.ReleasesUrl) { UseShellExecute = true }); }
+            catch { /* manual fallback only */ }
+        }
     }
 
     /// <summary>
