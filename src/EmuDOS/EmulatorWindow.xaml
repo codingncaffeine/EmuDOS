@@ -1,7 +1,7 @@
 <Window x:Class="EmuDOS.EmulatorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="EmuDOS" Width="800" Height="640" Icon="/Assets/EmuDOS.ico"
+        Title="EmuDOS" Width="800" Height="640" Icon="pack://application:,,,/Assets/EmuDOS.ico"
         Background="Black" WindowStartupLocation="CenterScreen"
         Focusable="True"
         PreviewKeyDown="OnKeyDown" PreviewKeyUp="OnKeyUp"
