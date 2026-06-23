@@ -2,6 +2,7 @@ using System.IO.Compression;
 using EmuDOS.Core.Import;
 using EmuDOS.Core.Infrastructure;
 using EmuDOS.Core.Library;
+using EmuDOS.Core.Model;
 
 namespace EmuDOS.Tests;
 
@@ -23,6 +24,35 @@ public class ImportPipelineTests
         Assert.True(store.IsGamebox(result.GameboxPath!));
         Assert.True(File.Exists(Path.Combine(result.GameboxPath!, "content", "DOOM.EXE")));
         Assert.Equal("DOOM.EXE", store.ReadProfile(result.GameboxPath!).Launch.Executable);
+    }
+
+    [Fact]
+    public async Task Preinstalled_game_with_autoboot_beside_its_cd_is_ready_not_a_raw_disc()
+    {
+        // Mirrors the real 7th Guest shape: game installed under ID\T7G, AUTOBOOT.DBP naming it, the
+        // CD nested in spaced folders, and Mac-zip junk — all of which previously made it import as Iso.
+        var source = TempDir();
+        var t7g = Path.Combine(source, "ID", "T7G");
+        Directory.CreateDirectory(t7g);
+        File.WriteAllText(Path.Combine(t7g, "T7G.BAT"), "@v !");
+        File.WriteAllText(Path.Combine(t7g, "V.EXE"), "x");
+        File.WriteAllText(Path.Combine(t7g, "INSTALL.EXE"), "x");
+        File.WriteAllText(Path.Combine(source, "AUTOBOOT.DBP"), "C:\\ID\\T7G\\T7G.BAT\r\n10");
+        Directory.CreateDirectory(Path.Combine(source, "__MACOSX"));
+        File.WriteAllText(Path.Combine(source, "__MACOSX", "._AUTOBOOT.DBP"), "junk");
+        var disc = Path.Combine(source, "My Game (CD-ROM)", "Disc 1");
+        Directory.CreateDirectory(disc);
+        File.WriteAllText(Path.Combine(disc, "G_DISC1.bin"), "1");
+        File.WriteAllText(Path.Combine(disc, "G_DISC1.cue"), "FILE \"G_DISC1.bin\" BINARY\n  TRACK 01 MODE1/2352\n");
+        var (pipeline, store) = NewPipeline();
+
+        var result = await pipeline.ImportAsync(source);
+
+        Assert.True(result.Success, result.Error);
+        var profile = store.ReadProfile(result.GameboxPath!);
+        Assert.NotEqual(SourceMediaType.Iso, profile.SourceMedia); // mounted as C:, not a raw disc
+        Assert.Equal("ID\\T7G\\T7G.BAT", profile.Launch.Executable); // the AUTOBOOT target, not INSTALL.EXE
+        Assert.Equal(ImportClassification.ReadyToPlay, result.Classification);
     }
 
     [Fact]
