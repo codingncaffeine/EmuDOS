@@ -36,6 +36,10 @@ internal static class LibretroConstants
     public const uint MemorySaveRam = 0;
     public const uint MemorySystemRam = 2;
 
+    // RETRO_ENVIRONMENT_SET_MEMORY_MAPS = (36 | RETRO_ENVIRONMENT_EXPERIMENTAL 0x10000). The core
+    // describes its memory regions (live pointers) this way — dosbox_pure uses this, not get_memory_data.
+    public const uint EnvSetMemoryMaps = 36 | 0x10000;
+
     // The dosbox_pure core supports running with content (a folder/zip/conf path).
     public const string DosBoxPureCoreId = "dosbox_pure";
 }

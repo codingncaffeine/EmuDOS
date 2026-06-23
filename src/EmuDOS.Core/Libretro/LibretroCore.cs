@@ -13,6 +13,11 @@ public delegate void AudioFrameHandler(ReadOnlySpan<short> interleavedStereo);
 /// <summary>Answers a libretro input query (port, device, index, id) → state.</summary>
 public delegate short InputStateProvider(uint port, uint device, uint index, uint id);
 
+/// <summary>A live memory region the core published via SET_MEMORY_MAPS — a raw pointer into the core's
+/// own address space (valid while the game is loaded), the guest address it maps, and its length. The
+/// foundation for the cheat engine: read/write these from the core thread.</summary>
+public readonly record struct MemoryRegion(nint Pointer, long Length, ulong GuestStart, ulong Flags);
+
 /// <summary>
 /// A thin, software-rendered libretro host: loads a core DLL (dosbox_pure), answers its
 /// environment queries — crucially returning per-game option values from <see cref="Options"/>
@@ -61,6 +66,8 @@ public sealed class LibretroCore : IDisposable
     private readonly RetroSerializeSize? _serializeSize;
     private readonly RetroSerialize? _serialize;
     private readonly RetroUnserialize? _unserialize;
+    private readonly RetroGetMemoryData? _getMemoryData;
+    private readonly RetroGetMemorySize? _getMemorySize;
 
     public LibretroCore(string corePath)
     {
@@ -93,6 +100,8 @@ public sealed class LibretroCore : IDisposable
         _serializeSize = TryBind<RetroSerializeSize>("retro_serialize_size");
         _serialize = TryBind<RetroSerialize>("retro_serialize");
         _unserialize = TryBind<RetroUnserialize>("retro_unserialize");
+        _getMemoryData = TryBind<RetroGetMemoryData>("retro_get_memory_data");
+        _getMemorySize = TryBind<RetroGetMemorySize>("retro_get_memory_size");
 
         _envCb = Environment;
         _videoCb = OnVideoRefresh;
@@ -178,6 +187,10 @@ public sealed class LibretroCore : IDisposable
 
     public bool NeedsFullPath { get; private set; }
 
+    /// <summary>Memory regions the core published via SET_MEMORY_MAPS — what the cheat engine scans and
+    /// edits. Empty until a game loads and maps its memory.</summary>
+    public IReadOnlyList<MemoryRegion> MemoryRegions { get; private set; } = [];
+
     /// <summary>Register callbacks (environment first) — call before <see cref="Init"/>.</summary>
     public void SetCallbacks()
     {
@@ -228,6 +241,17 @@ public sealed class LibretroCore : IDisposable
     public void Run() => _run();
 
     public void Reset() => _reset();
+
+    /// <summary>Whether the core exposes the libretro memory API (needed for the cheat engine).</summary>
+    public bool SupportsMemoryAccess => _getMemoryData is not null && _getMemorySize is not null;
+
+    /// <summary>Pointer to a libretro memory region (e.g. <c>MemorySystemRam</c> = 2), or 0 if the core
+    /// doesn't expose it. This is the LIVE core memory — valid only while a game is loaded; read/write
+    /// it from the core thread between <see cref="Run"/> calls.</summary>
+    public nint GetMemoryData(uint id) => _getMemoryData?.Invoke(id) ?? 0;
+
+    /// <summary>Size in bytes of a libretro memory region, or 0 if the core doesn't expose it.</summary>
+    public long GetMemorySize(uint id) => _getMemorySize is null ? 0 : (long)_getMemorySize(id);
 
     public RetroAvInfo GetAvInfo()
     {
@@ -387,9 +411,48 @@ public sealed class LibretroCore : IDisposable
                 // Force the software path; we don't provide a GL/Vulkan context (yet).
                 return false;
 
+            case EnvSetMemoryMaps:
+                CaptureMemoryMaps(data);
+                return true;
+
             default:
                 return false;
         }
+    }
+
+    // retro_memory_map { const retro_memory_descriptor* descriptors; unsigned num_descriptors; }.
+    // retro_memory_descriptor (x64, 64-byte stride): flags@0(8) ptr@8(8) offset@16 start@24 select@32
+    // disconnect@40 len@48(8) addrspace@56. We keep ptr/len/start/flags to read & write the live memory.
+    private void CaptureMemoryMaps(nint data)
+    {
+        var regions = new List<MemoryRegion>();
+        try
+        {
+            if (data != 0)
+            {
+                nint descriptors = Marshal.ReadIntPtr(data, 0);
+                int count = Marshal.ReadInt32(data, nint.Size);
+                const int stride = 64;
+                for (int i = 0; i < count && descriptors != 0; i++)
+                {
+                    nint d = descriptors + i * stride;
+                    long flags = Marshal.ReadInt64(d, 0);
+                    nint ptr = Marshal.ReadIntPtr(d, 8);
+                    long start = Marshal.ReadInt64(d, 24);
+                    long len = Marshal.ReadInt64(d, 48);
+                    if (ptr != 0 && len > 0)
+                        regions.Add(new MemoryRegion(ptr, len, (ulong)start, (ulong)flags));
+                }
+            }
+        }
+        catch { /* keep whatever we captured */ }
+
+        MemoryRegions = regions;
+        long total = 0;
+        foreach (var r in regions)
+            total += r.Length;
+        CoreLog?.Invoke(1, $"[memory] mapped {regions.Count} region(s), {total / 1024} KB total"
+            + (regions.Count > 0 ? $"; first guest=0x{regions[0].GuestStart:X} len={regions[0].Length}" : ""));
     }
 
     private bool HandleGetVariable(nint data)

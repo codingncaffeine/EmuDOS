@@ -68,6 +68,10 @@ internal delegate bool RetroMidiFlush();
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] internal delegate bool RetroSerialize(nint data, nuint size);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] internal delegate bool RetroUnserialize(nint data, nuint size);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate void RetroSetControllerPortDevice(uint port, uint device);
+// retro_get_memory_data(id) -> void* ; retro_get_memory_size(id) -> size_t. For RETRO_MEMORY_SYSTEM_RAM
+// (id 2) dosbox_pure should hand back the live DOSBox memory array — the basis for a cheat engine.
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate nint RetroGetMemoryData(uint id);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal delegate nuint RetroGetMemorySize(uint id);
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
 internal struct RetroSystemInfo
