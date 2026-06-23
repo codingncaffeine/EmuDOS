@@ -83,6 +83,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         InitializeComponent();
         DarkChrome.Apply(this);
+        WindowIcon.Apply(this); // force the taskbar (big) icon
         _instance = instance;
         _gameId = gameId;
         Title = $"EmuDOS — {instance.Profile.Title}";

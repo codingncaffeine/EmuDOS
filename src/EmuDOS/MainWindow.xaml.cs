@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DarkChrome.Apply(this);
+        WindowIcon.Apply(this); // force the taskbar (big) icon — WPF only sets the small one reliably
         // Click anywhere in the app (the shelf) to dismiss an open card — in addition to its ✕/Esc.
         // (Deactivated never fires for owned windows, so we close it from the owner's click instead.)
         PreviewMouseDown += (_, _) => _openCard?.Close();
