@@ -178,13 +178,14 @@ public partial class MainWindow : Window
         // each shows up in dosbox_pure's start menu to mount as D: (swap CDs without leaving the OS).
         if (IsDiscGame(tile))
         {
-            var addDisc = new MenuItem { Header = "💿  Add disc…" };
-            addDisc.Click += (_, _) => AddDisc(tile);
+            var addDisc = new MenuItem { Header = "💿  Add disc" };
+            var fromFile = new MenuItem { Header = "From a disc image…" };
+            fromFile.Click += (_, _) => AddDisc(tile);
+            var fromFolder = new MenuItem { Header = "From a folder…" };
+            fromFolder.Click += (_, _) => AddDiscFromFolder(tile);
+            addDisc.Items.Add(fromFile);
+            addDisc.Items.Add(fromFolder);
             menu.Items.Add(addDisc);
-
-            var addFromFolder = new MenuItem { Header = "💿  Add disc from folder…" };
-            addFromFolder.Click += (_, _) => AddDiscFromFolder(tile);
-            menu.Items.Add(addFromFolder);
         }
 
         menu.Items.Add(new Separator());
