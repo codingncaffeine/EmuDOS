@@ -24,6 +24,7 @@ public sealed class DosBoxPureSession : IDosSession
     private readonly string _corePath;
     private readonly string _systemDir;
     private readonly ConcurrentQueue<Action> _pending = new();
+    private volatile IReadOnlyDictionary<ulong, byte[]>? _frozen; // cheat freeze set (swapped wholesale)
 
     private Thread? _thread;
     private LibretroCore? _core;
@@ -89,6 +90,31 @@ public sealed class DosBoxPureSession : IDosSession
 
     public bool LoadStateBytes(byte[] data) =>
         RunOnCoreThread(() => _core is not null && _core.LoadState(data));
+
+    // ── Cheat engine memory access (marshalled onto the core thread). ──
+
+    public IReadOnlyList<MemoryRegion> MemoryRegions => _core?.MemoryRegions ?? Array.Empty<MemoryRegion>();
+
+    public IReadOnlyList<(MemoryRegion Region, byte[] Data)> SnapshotMemory()
+    {
+        IReadOnlyList<(MemoryRegion, byte[])> snap = Array.Empty<(MemoryRegion, byte[])>();
+        RunOnCoreThread(() => { snap = _core?.SnapshotMemory() ?? snap; return true; });
+        return snap;
+    }
+
+    public byte[]? ReadMemory(ulong address, int count)
+    {
+        if (count <= 0)
+            return null;
+        var buf = new byte[count];
+        return RunOnCoreThread(() => _core is not null && _core.ReadMemory(address, buf, count)) ? buf : null;
+    }
+
+    public bool WriteMemory(ulong address, byte[] data) =>
+        RunOnCoreThread(() => _core is not null && _core.WriteMemory(address, data));
+
+    /// <summary>Swap in a fresh frozen set; it's re-applied every frame on the core thread.</summary>
+    public void SetFrozen(IReadOnlyDictionary<ulong, byte[]>? frozen) => _frozen = frozen;
 
     public void Dispose()
     {
@@ -224,6 +250,11 @@ public sealed class DosBoxPureSession : IDosSession
 
             _core!.Run();
             frame++;
+
+            // Re-apply frozen cheat values after the game updated them this frame.
+            if (_frozen is { Count: > 0 } frozen)
+                foreach (var kv in frozen)
+                    _core.WriteMemory(kv.Key, kv.Value);
 
             double behindMs = sw.Elapsed.TotalMilliseconds - (frame * frameMs);
             if (behindMs < -1)

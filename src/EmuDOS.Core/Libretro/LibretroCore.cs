@@ -253,6 +253,53 @@ public sealed class LibretroCore : IDisposable
     /// <summary>Size in bytes of a libretro memory region, or 0 if the core doesn't expose it.</summary>
     public long GetMemorySize(uint id) => _getMemorySize is null ? 0 : (long)_getMemorySize(id);
 
+    // ── Live memory read/write (cheat engine). CORE THREAD ONLY — the pointers are into the core's
+    // own address space and only stable between Run() calls. ──
+
+    /// <summary>Read <paramref name="count"/> bytes at a guest address into <paramref name="buffer"/>.
+    /// Returns false if the range isn't fully inside a mapped region.</summary>
+    public bool ReadMemory(ulong guestAddr, byte[] buffer, int count)
+    {
+        foreach (var r in MemoryRegions)
+        {
+            if (r.Pointer == 0 || guestAddr < r.GuestStart
+                || guestAddr + (ulong)count > r.GuestStart + (ulong)r.Length)
+                continue;
+            Marshal.Copy(r.Pointer + (nint)(guestAddr - r.GuestStart), buffer, 0, count);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Write bytes at a guest address. Returns false if the range isn't inside a region.</summary>
+    public bool WriteMemory(ulong guestAddr, byte[] data)
+    {
+        foreach (var r in MemoryRegions)
+        {
+            if (r.Pointer == 0 || guestAddr < r.GuestStart
+                || guestAddr + (ulong)data.Length > r.GuestStart + (ulong)r.Length)
+                continue;
+            Marshal.Copy(data, 0, r.Pointer + (nint)(guestAddr - r.GuestStart), data.Length);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Snapshot every mapped region's bytes — the basis for a memory scan.</summary>
+    public IReadOnlyList<(MemoryRegion Region, byte[] Data)> SnapshotMemory()
+    {
+        var list = new List<(MemoryRegion, byte[])>(MemoryRegions.Count);
+        foreach (var r in MemoryRegions)
+        {
+            if (r.Pointer == 0 || r.Length <= 0 || r.Length > int.MaxValue)
+                continue;
+            var buf = new byte[r.Length];
+            Marshal.Copy(r.Pointer, buf, 0, (int)r.Length);
+            list.Add((r, buf));
+        }
+        return list;
+    }
+
     public RetroAvInfo GetAvInfo()
     {
         nint p = Marshal.AllocHGlobal(Marshal.SizeOf<RetroSystemAvInfo>());

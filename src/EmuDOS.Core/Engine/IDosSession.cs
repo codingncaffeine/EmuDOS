@@ -1,4 +1,5 @@
 using EmuDOS.Core.Input;
+using EmuDOS.Core.Libretro;
 using EmuDOS.Core.Model;
 
 namespace EmuDOS.Core.Engine;
@@ -42,4 +43,22 @@ public interface IDosSession : IDisposable
 
     /// <summary>The MT-32 LCD text when our synth is driving MIDI; null when it isn't active.</summary>
     string? Mt32Lcd => null;
+
+    // ── Cheat engine: live memory access (marshalled onto the emulation thread by the implementation). ──
+
+    /// <summary>Memory regions the core exposed (guest address + length), or empty if none/unsupported.</summary>
+    IReadOnlyList<MemoryRegion> MemoryRegions => Array.Empty<MemoryRegion>();
+
+    /// <summary>Copy every memory region's bytes — the basis for a scan.</summary>
+    IReadOnlyList<(MemoryRegion Region, byte[] Data)> SnapshotMemory() =>
+        Array.Empty<(MemoryRegion, byte[])>();
+
+    /// <summary>Read <paramref name="count"/> bytes at a guest address, or null if out of range.</summary>
+    byte[]? ReadMemory(ulong address, int count) => null;
+
+    /// <summary>Write bytes at a guest address. Returns false if unsupported or out of range.</summary>
+    bool WriteMemory(ulong address, byte[] data) => false;
+
+    /// <summary>Set the frozen values re-applied every frame (pass a fresh dictionary; null clears).</summary>
+    void SetFrozen(IReadOnlyDictionary<ulong, byte[]>? frozen) { }
 }
