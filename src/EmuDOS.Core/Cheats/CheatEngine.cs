@@ -136,6 +136,13 @@ public sealed class CheatEngine(IDosSession session)
 
     public bool IsFrozen(ulong address) => _frozen.ContainsKey(address);
 
+    /// <summary>Release every frozen value (e.g. when the cheat window closes).</summary>
+    public void ClearAllFreezes()
+    {
+        _frozen.Clear();
+        _session.SetFrozen(null);
+    }
+
     // ── helpers ──
 
     private IReadOnlyList<(MemoryRegionInfo, byte[])> Snap()

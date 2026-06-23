@@ -435,6 +435,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
+        if (effective == Key.F11)
+        {
+            OpenCheats();
+            e.Handled = true;
+            return;
+        }
 
         var key = KeyMap.ToDosKey(effective);
         if (key == DosKey.None)
@@ -708,6 +714,23 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         }
         RecIndicator.Visibility = Visibility.Visible;
         ShowHint("Recording started — F9 to stop", 1.5);
+    }
+
+    private CheatWindow? _cheatWindow;
+
+    // F11 — open the cheat engine over the running game (a free-floating window so it can live on a
+    // second monitor). Reuse the existing one if it's already up.
+    private void OpenCheats()
+    {
+        if (_cheatWindow is not null)
+        {
+            _cheatWindow.Activate();
+            return;
+        }
+        _cheatWindow = new CheatWindow(_session) { Owner = this };
+        _cheatWindow.Closed += (_, _) => _cheatWindow = null;
+        _cheatWindow.Show();
+        ShowHint("Cheat engine opened (F11)");
     }
 
     private static string SafeName(string title) =>
