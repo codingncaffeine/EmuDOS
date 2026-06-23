@@ -106,7 +106,9 @@ public sealed class CheatEngine(IDosSession session)
         {
             if (list.Count >= max)
                 break;
-            if (ReadLive(addr, type) is { } v)
+            // Use the value captured during the last scan (in-memory) — NOT a per-candidate live read,
+            // which would be hundreds of cross-thread round-trips and freeze the UI.
+            if (TryRead(_last, addr, type, out double v))
                 list.Add(new ScanResult(addr, v));
         }
         return list;

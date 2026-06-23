@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -40,7 +41,7 @@ public partial class CheatWindow : Window
         HighlightSelector(ScanSelector, _comparison.ToString());
 
         if (_engine is null)
-            StatusText.Text = "⌁ PREVIEW — NO GAME RUNNING";
+            StatusText.Text = "⌁ PREVIEW — LAUNCH A GAME & PRESS F11 TO USE";
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         _timer.Tick += (_, _) => RefreshLive();
@@ -74,20 +75,24 @@ public partial class CheatWindow : Window
                 tb.Foreground = string.Equals((string)tb.Tag, selectedTag, StringComparison.Ordinal) ? on : off;
     }
 
-    private void OnStartScan(object sender, RoutedEventArgs e)
+    private async void OnStartScan(object sender, RoutedEventArgs e)
     {
-        if (_engine is null) { Beep("NO GAME"); return; }
+        if (_engine is null) { Beep("PREVIEW — OPEN IN A GAME WITH F11"); return; }
         double? value = ParseValue(ValueBox.Text, _type);
         if (_comparison == ScanComparison.Exact && value is null) { Beep("ENTER A VALUE"); return; }
-        int n = _engine.FirstScan(_type, _comparison, value);
+        Beep("SCANNING…");
+        var (engine, type, cmp) = (_engine, _type, _comparison);
+        int n = await Task.Run(() => engine.FirstScan(type, cmp, value)); // off the UI thread
         AfterScan(n);
     }
 
-    private void OnNextScan(object sender, RoutedEventArgs e)
+    private async void OnNextScan(object sender, RoutedEventArgs e)
     {
-        if (_engine is null) { Beep("NO GAME"); return; }
+        if (_engine is null) { Beep("PREVIEW — OPEN IN A GAME WITH F11"); return; }
         double? value = ParseValue(ValueBox.Text, _type);
-        int n = _engine.NextScan(_type, _comparison, value);
+        Beep("SCANNING…");
+        var (engine, type, cmp) = (_engine, _type, _comparison);
+        int n = await Task.Run(() => engine.NextScan(type, cmp, value));
         AfterScan(n);
     }
 
@@ -100,13 +105,12 @@ public partial class CheatWindow : Window
 
     private void AfterScan(int count)
     {
-        ResultsHeader.Text = $"RESULTS ({count})";
-        // Show a bounded slice; huge candidate sets (an UNKNOWN first scan) stay internal until narrowed.
-        ResultsList.ItemsSource = count <= 800 && _engine is not null
+        ResultsHeader.Text = count > 800 ? $"RESULTS ({count}) — NARROW FURTHER" : $"RESULTS ({count})";
+        Beep(count == 0 ? "NO MATCHES — TRY BYTE/WORD OR A DIFFERENT VALUE" : $"{count} MATCH{(count == 1 ? "" : "ES")}");
+        // Show a bounded slice; huge candidate sets (e.g. an UNKNOWN first scan) stay internal until narrowed.
+        ResultsList.ItemsSource = count is > 0 and <= 800 && _engine is not null
             ? _engine.Results(_type, 800).Select(r => new ResultView(r.Address, $"{FormatAddr(r.Address)} | {FormatValue(r.Value, _type)}")).ToList()
             : null;
-        if (count > 800)
-            ResultsHeader.Text = $"RESULTS ({count}) — NARROW FURTHER";
     }
 
     private void OnResultSelected(object sender, SelectionChangedEventArgs e)
