@@ -161,6 +161,16 @@ public partial class CheatWindow : Window
         SaveCheats();
     }
 
+    private void OnRemoveFromTable(object sender, RoutedEventArgs e)
+    {
+        if (CheatTable.SelectedItem is not CheatRow row) { Beep("SELECT A TABLE ROW TO REMOVE"); return; }
+        if (_engine is not null && row.Freeze)
+            _engine.SetFreeze(row.AddressValue, row.Type, 0, false); // release its freeze first
+        _rows.Remove(row);
+        SaveCheats();
+        Beep("REMOVED");
+    }
+
     private void OnFreezeChanged(object sender, RoutedEventArgs e)
     {
         if (_engine is null || sender is not CheckBox { DataContext: CheatRow row })
