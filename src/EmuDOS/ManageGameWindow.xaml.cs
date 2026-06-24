@@ -18,11 +18,15 @@ namespace EmuDOS;
 public partial class ManageGameWindow : Window
 {
     private readonly Gamebox _box;
+    private readonly AppServices _services;
+    private readonly string _title;
     private string _notesOnDisk = string.Empty;
 
     public ManageGameWindow(AppServices services, LibraryGame game)
     {
         InitializeComponent();
+        _services = services;
+        _title = game.Title;
         _box = new Gamebox(game.GameboxPath);
         Title = $"Manage — {game.Title}";
         HeaderText.Text = game.Title;
@@ -62,6 +66,62 @@ public partial class ManageGameWindow : Window
         Bind(VideosList, VideosEmpty, FileRows(_box.VideosDir, "*.mp4", thumb: false));
 
         Bind(SavesList, SavesEmpty, LoadInGameSaves());
+        LoadExtras();
+    }
+
+    private void LoadExtras()
+    {
+        var rows = Directory.Exists(_box.ExtrasDir)
+            ? Directory.EnumerateFiles(_box.ExtrasDir)
+                .Where(f => f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                         || f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                         || f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .Select(f => new Row { Thumb = LoadThumb(f), Primary = ExtraLabel(f), Path = f })
+                .ToList()
+            : new List<Row>();
+        Bind(ExtrasList, ExtrasEmpty, rows);
+    }
+
+    // "wheel" -> "Logo", "ss" -> "Screenshot", etc. (the SS media type is the file name).
+    private static string ExtraLabel(string path) =>
+        System.IO.Path.GetFileNameWithoutExtension(path).ToLowerInvariant() switch
+        {
+            "wheel" => "Logo",
+            "marquee" => "Marquee",
+            "fanart" => "Fan art",
+            "ss" => "Screenshot",
+            "maps" => "Map",
+            var other => char.ToUpperInvariant(other[0]) + other[1..],
+        };
+
+    private async void OnDownloadExtras(object sender, RoutedEventArgs e)
+    {
+        DownloadExtrasButton.IsEnabled = false;
+        ExtrasStatus.Text = "Downloading from ScreenScraper…";
+        try
+        {
+            var n = await _services.Art.FetchExtrasAsync(_title, _box.ExtrasDir);
+            ExtrasStatus.Text = n > 0 ? $"Downloaded {n} item(s)." : "No extras found for this game.";
+            LoadExtras();
+        }
+        catch (Exception ex)
+        {
+            ExtrasStatus.Text = $"Couldn't download: {ex.Message}";
+        }
+        finally
+        {
+            DownloadExtrasButton.IsEnabled = true;
+        }
+    }
+
+    private void OnOpenExtra(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Row row)
+            return;
+        var paths = (ExtrasList.ItemsSource as IEnumerable<Row>)?.Select(r => r.Path).ToList()
+                    ?? new List<string> { row.Path };
+        new ImageViewerWindow(paths, Math.Max(0, paths.IndexOf(row.Path))) { Owner = this }.Show();
     }
 
     // In-game saves differ by game type: Iso games persist to a *.pure.zip in saves/; folder games

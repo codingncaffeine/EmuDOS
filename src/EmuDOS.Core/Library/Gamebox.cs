@@ -33,6 +33,9 @@ public sealed class Gamebox(string root)
     /// <summary>Save data and save states.</summary>
     public string SavesDir => Path.Combine(Root, "saves");
 
+    /// <summary>Downloaded extras (logos, marquees, fanart, maps, screenshots) for the game.</summary>
+    public string ExtrasDir => Path.Combine(Root, "media", "extras");
+
     /// <summary>Per-game user state (window size, remembered executables) as JSON.</summary>
     public string StatePath => Path.Combine(Root, "state.json");
 

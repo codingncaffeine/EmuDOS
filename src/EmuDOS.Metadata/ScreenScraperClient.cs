@@ -63,6 +63,47 @@ public sealed partial class ScreenScraperClient
         return medias is null ? null : PickManual(medias);
     }
 
+    // Extra media types offered in the Manage window (beyond box art / manual / video).
+    private static readonly string[] ExtraTypes = ["wheel", "marquee", "fanart", "ss", "maps"];
+
+    /// <summary>Find the available "extra" media (clear logo, marquee, fanart, screenshot, maps) for a
+    /// game — one best URL per type, with its image format. Empty if none matched.</summary>
+    public async Task<IReadOnlyList<(string Type, string Url, string Format)>> FindExtrasAsync(
+        string gameName, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+
+        var medias = (await ResolveJeuAsync(gameName, cancellationToken))?["medias"]?.AsArray();
+        if (medias is null)
+            return [];
+
+        var result = new List<(string, string, string)>();
+        foreach (var type in ExtraTypes)
+            if (PickByType(medias, type) is var (url, format) && url is { Length: > 0 })
+                result.Add((type, url, string.IsNullOrEmpty(format) ? "png" : format));
+        return result;
+    }
+
+    // Best (regional) URL + format for a media type.
+    private static (string? Url, string? Format) PickByType(JsonArray medias, string type)
+    {
+        var items = medias.Where(m =>
+            string.Equals(m?["type"]?.GetValue<string>(), type, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (items.Count == 0)
+            return (null, null);
+
+        JsonNode? chosen = null;
+        foreach (var region in RegionPreference)
+        {
+            chosen = items.FirstOrDefault(m =>
+                string.Equals(m?["region"]?.GetValue<string>(), region, StringComparison.OrdinalIgnoreCase));
+            if (chosen is not null)
+                break;
+        }
+        chosen ??= items[0];
+        return (chosen?["url"]?.GetValue<string>(), chosen?["format"]?.GetValue<string>());
+    }
+
     /// <summary>Find a gameplay video-snap URL (prefers the smaller "video-normalized" media, falling
     /// back to "video"), or null if ScreenScraper has none.</summary>
     public async Task<string?> FindVideoUrlAsync(string gameName, CancellationToken cancellationToken = default)

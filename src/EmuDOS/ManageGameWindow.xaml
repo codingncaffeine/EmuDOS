@@ -96,6 +96,23 @@
             </Grid>
         </DataTemplate>
 
+        <!-- Extras gallery thumbnail (click to open the flipbook viewer). -->
+        <DataTemplate x:Key="ExtraThumb">
+            <Button Click="OnOpenExtra" Cursor="Hand" Margin="6" Background="Transparent" BorderThickness="0" Padding="0">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <StackPanel Width="156">
+                            <Border Background="#22000000" CornerRadius="3" Height="116">
+                                <Image Source="{Binding Thumb}" Stretch="Uniform" Margin="5"/>
+                            </Border>
+                            <TextBlock Text="{Binding Primary}" Foreground="{StaticResource TextSecondary}"
+                                       HorizontalAlignment="Center" Margin="0,4,0,0" FontSize="11"/>
+                        </StackPanel>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </DataTemplate>
+
         <Style x:Key="EmptyHint" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
             <Setter Property="Margin" Value="4,12"/>
             <Setter Property="FontStyle" Value="Italic"/>
@@ -113,6 +130,34 @@
                              HorizontalContentAlignment="Stretch"/>
                     <TextBlock x:Name="StatesEmpty" Style="{StaticResource EmptyHint}"
                                Text="No save states yet — press F5 in-game to make one." Visibility="Collapsed"/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Extras">
+                <Grid Margin="12,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="6,2,0,8">
+                        <Button x:Name="DownloadExtrasButton" Content="Download from ScreenScraper"
+                                Padding="14,6" Click="OnDownloadExtras"/>
+                        <TextBlock x:Name="ExtrasStatus" VerticalAlignment="Center" Margin="14,0,0,0"
+                                   Foreground="{StaticResource TextSecondary}"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <Grid>
+                            <ListBox x:Name="ExtrasList" Background="Transparent" BorderThickness="0"
+                                     ItemTemplate="{StaticResource ExtraThumb}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                            </ListBox>
+                            <TextBlock x:Name="ExtrasEmpty" Style="{StaticResource EmptyHint}"
+                                       Text="No extras yet — click Download to fetch logos, marquees, fan art, maps and screenshots."
+                                       Visibility="Collapsed"/>
+                        </Grid>
+                    </ScrollViewer>
                 </Grid>
             </TabItem>
             <TabItem Header="Screenshots">

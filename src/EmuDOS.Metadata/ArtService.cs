@@ -72,6 +72,28 @@ public sealed class ArtService(ScreenScraperClient screenScraper, SteamGridDbCli
         return true;
     }
 
+    /// <summary>Download the available extras (clear logo, marquee, fanart, screenshot, maps) for a
+    /// game into <paramref name="extrasDir"/>, named <c>&lt;type&gt;.&lt;ext&gt;</c>. Returns how many
+    /// were saved. ScreenScraper-only.</summary>
+    public async Task<int> FetchExtrasAsync(string gameName, string extrasDir, CancellationToken cancellationToken = default)
+    {
+        var extras = await screenScraper.FindExtrasAsync(gameName, cancellationToken);
+        if (extras.Count == 0)
+            return 0;
+
+        Directory.CreateDirectory(extrasDir);
+        int saved = 0;
+        foreach (var (type, url, format) in extras)
+        {
+            var bytes = await screenScraper.DownloadAsync(url, cancellationToken);
+            if (!IsUsable(bytes))
+                continue;
+            await File.WriteAllBytesAsync(Path.Combine(extrasDir, $"{type}.{format}"), bytes!, cancellationToken);
+            saved++;
+        }
+        return saved;
+    }
+
     private async Task<byte[]?> FromScreenScraperAsync(string gameName, CancellationToken cancellationToken)
     {
         var url = await screenScraper.FindBoxArtUrlAsync(gameName, cancellationToken);
