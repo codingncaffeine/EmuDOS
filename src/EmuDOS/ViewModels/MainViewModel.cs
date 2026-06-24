@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -121,15 +122,116 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<GameTile> Games { get; } = [];
 
+    // ── Library filter (Ctrl+F) ───────────────────────────────────────────────────────────────
+    private const string AllGenres = "All genres";
+    private const string AllYears = "All years";
+    private readonly List<GameTile> _allTiles = [];
+    private Dictionary<long, GameMetadata?>? _metaCache;
+
+    [ObservableProperty] private bool _isFilterOpen;
+    [ObservableProperty] private string _searchText = "";
+    [ObservableProperty] private string _selectedGenre = AllGenres;
+    [ObservableProperty] private string _selectedDecade = AllYears;
+    [ObservableProperty] private bool _favoritesOnly;
+
+    public ObservableCollection<string> Genres { get; } = [];
+    public ObservableCollection<string> Decades { get; } = [];
+
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSelectedGenreChanged(string value) => ApplyFilter();
+    partial void OnSelectedDecadeChanged(string value) => ApplyFilter();
+    partial void OnFavoritesOnlyChanged(bool value) => ApplyFilter();
+
     public void LoadLibrary()
     {
+        _allTiles.Clear();
         Games.Clear();
         var use3D = _services.Settings.Use3DBoxes;
         foreach (var game in _services.Library.GetGames())
         {
             var style = _services.Store.ReadState(game.GameboxPath).BoxStyle;
-            Games.Add(new GameTile(game, style, use3D));
+            var tile = new GameTile(game, style, use3D);
+            _allTiles.Add(tile);
+            Games.Add(tile);
         }
+        _metaCache = null; // genre/year cache is rebuilt next time the filter opens
+    }
+
+    /// <summary>Toggle the filter box; building the genre/year choices the first time it's needed.</summary>
+    public void ToggleFilter()
+    {
+        IsFilterOpen = !IsFilterOpen;
+        if (IsFilterOpen)
+            EnsureFilterChoices();
+        else
+            ClearFilter();
+    }
+
+    public void ClearFilter()
+    {
+        SearchText = "";
+        SelectedGenre = AllGenres;
+        SelectedDecade = AllYears;
+        FavoritesOnly = false;
+        ApplyFilter();
+    }
+
+    // Read each game's metadata once (genre/year live in metadata.json) and collect the dropdown choices.
+    private void EnsureFilterChoices()
+    {
+        if (_metaCache is not null)
+            return;
+        _metaCache = new Dictionary<long, GameMetadata?>();
+        var genres = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var decades = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var tile in _allTiles)
+        {
+            var md = _services.Store.ReadMetadata(tile.Game.GameboxPath);
+            _metaCache[tile.Id] = md;
+            if (!string.IsNullOrWhiteSpace(md?.Genre))
+                genres.Add(md.Genre.Trim());
+            if (DecadeOf(md) is { } d)
+                decades.Add(d);
+        }
+        Genres.Clear();
+        Genres.Add(AllGenres);
+        foreach (var g in genres) Genres.Add(g);
+        Decades.Clear();
+        Decades.Add(AllYears);
+        foreach (var d in decades) Decades.Add(d);
+    }
+
+    private static string? DecadeOf(GameMetadata? md)
+    {
+        var year = md?.Year;
+        if (year is null || year.Length < 4 || !int.TryParse(year.AsSpan(0, 4), out var y))
+            return null;
+        return $"{y / 10 * 10}s";
+    }
+
+    private void ApplyFilter()
+    {
+        Games.Clear();
+        foreach (var tile in _allTiles)
+            if (Matches(tile))
+                Games.Add(tile);
+    }
+
+    private bool Matches(GameTile tile)
+    {
+        if (!string.IsNullOrWhiteSpace(SearchText)
+            && !tile.Title.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (FavoritesOnly && !tile.Game.IsFavorite)
+            return false;
+
+        var md = _metaCache?.GetValueOrDefault(tile.Id);
+        if (SelectedGenre != AllGenres
+            && !string.Equals(md?.Genre?.Trim(), SelectedGenre, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (SelectedDecade != AllYears && DecadeOf(md) != SelectedDecade)
+            return false;
+        return true;
     }
 
     /// <summary>Show a transient status (import/download/problem).</summary>

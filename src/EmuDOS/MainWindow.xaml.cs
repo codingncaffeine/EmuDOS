@@ -605,6 +605,13 @@ public partial class MainWindow : Window
             Vm.SelectAll();
             e.Handled = true;
         }
+        else if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            Vm.ToggleFilter();
+            if (Vm.IsFilterOpen)
+                FilterSearch.Focus();
+            e.Handled = true;
+        }
         else if (e.Key == Key.Delete)
         {
             DeleteSelected();
@@ -612,8 +619,16 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.Escape)
         {
-            Vm.ClearSelection();
+            if (Vm.IsFilterOpen)
+                Vm.ToggleFilter(); // close + clear the filter
+            else
+                Vm.ClearSelection();
         }
+    }
+
+    private void OnCloseFilter(object sender, RoutedEventArgs e)
+    {
+        Vm?.ToggleFilter();
     }
 
     private void DeleteSelected()

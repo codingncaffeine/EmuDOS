@@ -104,6 +104,28 @@
             </Border>
         </ScrollViewer>
 
+        <!-- Library filter (Ctrl+F): a themed box over the shelf with search + genre/year/favorites. -->
+        <Border Grid.Row="0" VerticalAlignment="Top" HorizontalAlignment="Center" Panel.ZIndex="10"
+                Background="{StaticResource BgSecondary}" BorderBrush="#E03535" BorderThickness="1"
+                CornerRadius="6" Margin="0,10,0,0" Padding="10,8"
+                Visibility="{Binding IsFilterOpen, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Filter" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"
+                           Margin="2,0,10,0" FontWeight="SemiBold"/>
+                <TextBox x:Name="FilterSearch" Width="200" VerticalAlignment="Center"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
+                <ComboBox Width="150" Margin="8,0,0,0" VerticalAlignment="Center"
+                          ItemsSource="{Binding Genres}" SelectedItem="{Binding SelectedGenre}"/>
+                <ComboBox Width="110" Margin="8,0,0,0" VerticalAlignment="Center"
+                          ItemsSource="{Binding Decades}" SelectedItem="{Binding SelectedDecade}"/>
+                <CheckBox Content="Favorites" Margin="10,0,0,0" VerticalAlignment="Center"
+                          Foreground="{StaticResource TextPrimary}" IsChecked="{Binding FavoritesOnly}"/>
+                <Button Content="✕" Margin="10,0,2,0" Padding="8,2" Click="OnCloseFilter"
+                        Background="Transparent" Foreground="{StaticResource TextSecondary}" BorderThickness="0"
+                        Cursor="Hand" ToolTip="Close (Esc)"/>
+            </StackPanel>
+        </Border>
+
         <StackPanel Grid.Row="1">
             <!-- Update notice: shown when a newer release is on GitHub; click to open the download. -->
             <Button Command="{Binding InstallUpdateCommand}" Cursor="Hand"
