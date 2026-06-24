@@ -61,6 +61,7 @@
                                   MouseMove="OnBoxMouseMove"
                                   MouseLeftButtonUp="OnBoxMouseUp"
                                   MouseRightButtonUp="OnBoxRightClick"
+                                  MouseEnter="OnBoxMouseEnter" MouseLeave="OnBoxMouseLeave"
                                   AllowDrop="True" DragOver="OnBoxArtDragOver" Drop="OnBoxArtDrop"
                                   Background="Transparent">
                                 <Grid.Effect>
@@ -151,5 +152,19 @@
                 </Grid>
             </Border>
         </StackPanel>
+
+        <!-- Hover preview: a Trinitron monitor showing the game's video snap (video behind the frame's
+             transparent screen). Positioned + filled in code on hover. -->
+        <Popup x:Name="HoverPopup" AllowsTransparency="True" StaysOpen="True" IsHitTestVisible="False"
+               Placement="Right" PopupAnimation="Fade">
+            <Grid Width="360" Height="345">
+                <Grid.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.6"/>
+                </Grid.Effect>
+                <Image x:Name="HoverVideo" Margin="41,38,40,80" Stretch="Fill"
+                       RenderOptions.BitmapScalingMode="LowQuality"/>
+                <Image Source="/Assets/monitor.png" Stretch="Fill"/>
+            </Grid>
+        </Popup>
     </Grid>
 </Window>

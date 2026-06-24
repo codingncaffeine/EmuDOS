@@ -9,6 +9,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using EmuDOS.Controls;
 using EmuDOS.Core.Downloads;
 using EmuDOS.Core.Engine.DosBoxPure;
@@ -629,6 +630,81 @@ public partial class MainWindow : Window
     private void OnCloseFilter(object sender, RoutedEventArgs e)
     {
         Vm?.ToggleFilter();
+    }
+
+    // ── Hover video preview (Trinitron monitor popup) ─────────────────────────────────────────
+    private SnapPlayer? _hoverPlayer;
+    private DispatcherTimer? _hoverTimer;
+    private GameTile? _hoverTile;
+    private FrameworkElement? _hoverElement;
+    private readonly HashSet<long> _noSnap = [];
+
+    private void OnBoxMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (Vm is null || Vm.IsEditMode)
+            return;
+        if (sender is not FrameworkElement { DataContext: GameTile tile } element)
+            return;
+        _hoverTile = tile;
+        _hoverElement = element;
+        _hoverTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+        _hoverTimer.Tick -= OnHoverTick;
+        _hoverTimer.Tick += OnHoverTick;
+        _hoverTimer.Stop();
+        _hoverTimer.Start();
+    }
+
+    private void OnBoxMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GameTile tile } && tile == _hoverTile)
+        {
+            _hoverTimer?.Stop();
+            _hoverTile = null;
+            HideHoverPreview();
+        }
+    }
+
+    private void OnHoverTick(object? sender, EventArgs e)
+    {
+        _hoverTimer?.Stop();
+        if (_hoverTile is { } tile && _hoverElement is { } element)
+            ShowHoverPreview(tile, element);
+    }
+
+    private async void ShowHoverPreview(GameTile tile, FrameworkElement element)
+    {
+        if (_noSnap.Contains(tile.Id))
+            return;
+        var services = ((App)Application.Current).Services;
+        var snapPath = Path.Combine(services.Paths.SnapsDir, SnapKeyFor(tile) + ".mp4");
+        if (!File.Exists(snapPath))
+        {
+            // Fetch once in the background; the preview shows next hover (don't block or spam SS).
+            try { await services.Art.FetchSnapAsync(tile.Title, snapPath); } catch { }
+            if (!File.Exists(snapPath))
+                _noSnap.Add(tile.Id);
+            return;
+        }
+        if (_hoverTile != tile)
+            return;
+
+        _hoverPlayer ??= new SnapPlayer(Dispatcher);
+        HoverVideo.Source = _hoverPlayer.Bitmap;
+        HoverPopup.PlacementTarget = element;
+        HoverPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Right;
+        _hoverPlayer.Play(snapPath, onFirstFrame: () => { if (_hoverTile == tile) HoverPopup.IsOpen = true; });
+    }
+
+    private void HideHoverPreview()
+    {
+        HoverPopup.IsOpen = false;
+        _hoverPlayer?.Stop();
+    }
+
+    private static string SnapKeyFor(GameTile tile)
+    {
+        var id = string.IsNullOrWhiteSpace(tile.Game.CanonicalId) ? tile.Title : tile.Game.CanonicalId!;
+        return string.Concat(id.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
     }
 
     private void DeleteSelected()
