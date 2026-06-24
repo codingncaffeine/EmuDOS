@@ -42,3 +42,4 @@ desktop.ini
 src/native/mt32/*.obj
 src/native/mt32/*.exp
 src/native/mt32/*.lib
+publish/

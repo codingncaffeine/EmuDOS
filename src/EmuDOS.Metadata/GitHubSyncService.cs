@@ -35,6 +35,10 @@ public sealed class GitHubSyncService
     private static readonly HttpClient Http = CreateClient();
     private static readonly SemaphoreSlim Gate = new(1, 1); // only one sync at a time (launch + manual)
 
+    // The GitHub Contents API rejects large blobs (and a huge base64 string overflows the JSON
+    // serializer). Files above this are skipped during sync — mainly OS install .pure.zip overlays.
+    private const long MaxUploadBytes = 40L * 1024 * 1024;
+
     private readonly Action<string> _log;
     private byte[]? _encKey; // set per SyncAsync; non-null = encrypt uploads / decrypt downloads
     private string _defaultBranch = "main"; // captured from the repo; used for recursive tree listing
@@ -167,7 +171,16 @@ public sealed class GitHubSyncService
                 var hash = Sha256Hex(rawForHash);
                 if (manifest.TryGetValue(repoPath, out var prev) && prev == hash)
                     return false; // unchanged since last sync
-                if (await PutAsync(token, login, repo, repoPath, makeUpload(), ct).ConfigureAwait(false))
+                var upload = makeUpload();
+                if (upload.Length > MaxUploadBytes)
+                {
+                    // The GitHub Contents API can't take large blobs, and base64-ing one into the JSON
+                    // request overflows the serializer. Skip it (e.g. a multi-hundred-MB OS .pure.zip)
+                    // rather than aborting the whole sync.
+                    _log($"Skipped {repoPath} — {upload.Length / (1024 * 1024)} MB is too large for cloud sync.");
+                    return false;
+                }
+                if (await PutAsync(token, login, repo, repoPath, upload, ct).ConfigureAwait(false))
                 {
                     manifest[repoPath] = hash;
                     return true;
@@ -216,7 +229,13 @@ public sealed class GitHubSyncService
                 {
                     if (remote.Contains(Path.GetFileName(f))) // additive: never overwrite an existing state
                         continue;
-                    if (await PutAsync(token, login, repo, $"saves/{name}/{Path.GetFileName(f)}", Wrap(File.ReadAllBytes(f)), ct).ConfigureAwait(false))
+                    var stateBytes = Wrap(File.ReadAllBytes(f));
+                    if (stateBytes.Length > MaxUploadBytes)
+                    {
+                        _log($"Skipped saves/{name}/{Path.GetFileName(f)} — {stateBytes.Length / (1024 * 1024)} MB is too large for cloud sync.");
+                        continue;
+                    }
+                    if (await PutAsync(token, login, repo, $"saves/{name}/{Path.GetFileName(f)}", stateBytes, ct).ConfigureAwait(false))
                     { up++; gameUp++; }
                     else
                         _log($"WARN: upload failed for saves/{name}/{Path.GetFileName(f)}");
@@ -388,6 +407,9 @@ public sealed class GitHubSyncService
 
     private static async Task<bool> PutAsync(string token, string login, string repo, string path, byte[] content, CancellationToken ct)
     {
+        if (content.LongLength > MaxUploadBytes)
+            return false; // safety net: never base64 an oversized blob into the JSON request
+
         var sha = await GetShaAsync(token, login, repo, path, ct).ConfigureAwait(false);
         var payload = new Dictionary<string, object>
         {
