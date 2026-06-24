@@ -153,6 +153,7 @@ public partial class MainWindow : Window
                  })
         {
             var captured = value;
+            var capturedLabel = label;
             var item = new MenuItem
             {
                 Header = label,
@@ -163,6 +164,7 @@ public partial class MainWindow : Window
             {
                 var st = services.Store.ReadState(tile.Game.GameboxPath);
                 services.Store.WriteState(tile.Game.GameboxPath, st with { Shader = captured });
+                Vm?.Report($"Shader set to {capturedLabel} for {tile.Title} — applies next launch.", busy: false);
             };
             shaderMenu.Items.Add(item);
         }
