@@ -800,7 +800,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         {
             var services = ((App)Application.Current).Services;
             BitmapSource source;
-            if (services.Settings.ScreenshotOriginalSize)
+            // Native-res clone only when there's no shader — a CRT shader is a display-space effect, so a
+            // shaded screenshot must capture the rendered Image (which carries the Effect) at its on-screen
+            // size, not the raw frame buffer.
+            if (services.Settings.ScreenshotOriginalSize && _shader == EmuDOS.Effects.VideoShader.Off)
             {
                 var snap = _bitmap.Clone();
                 snap.Freeze();
