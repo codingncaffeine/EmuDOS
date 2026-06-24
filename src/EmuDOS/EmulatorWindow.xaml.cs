@@ -25,7 +25,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 {
     private readonly IDosSession _session;
     private readonly object _frameLock = new();
-    private byte[] _frameBuffer = [];
+    private byte[] _frameBuffer = [];     // stable displayed frame (native or shaded); lock-guarded with the dims
+    private byte[] _nativeBuffer = [];    // pre-shader frame, emu-thread only (shader input)
     private int _frameWidth;
     private int _frameHeight;
     private WriteableBitmap? _bitmap;
@@ -193,39 +194,37 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (w <= 0 || h <= 0)
             return;
 
-        lock (_frameLock)
-        {
-            int needed = w * h * 4;
-            if (_frameBuffer.Length < needed)
-                _frameBuffer = new byte[needed];
+        // Build the native frame into _nativeBuffer (emu thread only — no lock needed; this thread is
+        // serial and is the sole writer/reader of _nativeBuffer).
+        int needed = w * h * 4;
+        if (_nativeBuffer.Length < needed)
+            _nativeBuffer = new byte[needed];
+        if (frame.Format == CorePixelFormat.Xrgb8888)
+            CopyXrgb8888(frame, w, h);
+        else
+            CopyRgb565(frame, w, h);
+        ApplyLut(w * h);
 
-            if (frame.Format == CorePixelFormat.Xrgb8888)
-                CopyXrgb8888(frame, w, h);
-            else
-                CopyRgb565(frame, w, h);
-
-            ApplyLut(w * h);
-
-            _frameWidth = w;
-            _frameHeight = h;
-        }
-
-        // Slang shader (librashader): run on this (emu) thread; the shaded result replaces the frame
-        // buffer so the present, recording and screenshot paths use it unchanged. Reads _frameBuffer
-        // outside the lock — safe (only this serial thread writes it; RenderFrame only reads).
+        // Slang shader (librashader): GPU pass on this thread. The final frame (shaded or native) is
+        // copied into _frameBuffer with its dims under one lock, so the display/record/screenshot paths
+        // always see a consistent buffer+size (no native↔shaded flicker, no recording size race).
         SyncShaderPreset();
+        byte[] final = _nativeBuffer;
+        int fw = w, fh = h;
         if (_shaderRenderer is { IsReady: true })
         {
-            var shaded = _shaderRenderer.Process(_frameBuffer, w, h, w * 4, isBgr32: true, out int sw, out int sh);
-            if (shaded != null && sw > 0 && sh > 0)
-                lock (_frameLock)
-                {
-                    int need = sw * sh * 4;
-                    if (_frameBuffer.Length < need) _frameBuffer = new byte[need];
-                    Buffer.BlockCopy(shaded, 0, _frameBuffer, 0, need);
-                    _frameWidth = sw;
-                    _frameHeight = sh;
-                }
+            var shaded = _shaderRenderer.Process(_nativeBuffer, w, h, w * 4, isBgr32: true, out int sw, out int sh);
+            if (shaded != null && sw > 0 && sh > 0) { final = shaded; fw = sw; fh = sh; }
+        }
+
+        lock (_frameLock)
+        {
+            int need = fw * fh * 4;
+            if (_frameBuffer.Length < need)
+                _frameBuffer = new byte[need];
+            Buffer.BlockCopy(final, 0, _frameBuffer, 0, need);
+            _frameWidth = fw;
+            _frameHeight = fh;
         }
 
         if (Interlocked.CompareExchange(ref _renderQueued, 1, 0) == 0)
@@ -358,7 +357,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     {
         // XRGB8888 little-endian is byte order B,G,R,X — identical to WPF Bgr32.
         for (int y = 0; y < h; y++)
-            Marshal.Copy(frame.Data + (y * frame.Pitch), _frameBuffer, y * w * 4, w * 4);
+            Marshal.Copy(frame.Data + (y * frame.Pitch), _nativeBuffer, y * w * 4, w * 4);
     }
 
     private unsafe void CopyRgb565(in VideoFrame frame, int w, int h)
@@ -371,10 +370,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             {
                 ushort p = row[x];
                 int r = (p >> 11) & 0x1F, g = (p >> 5) & 0x3F, b = p & 0x1F;
-                _frameBuffer[dst++] = (byte)((b << 3) | (b >> 2));
-                _frameBuffer[dst++] = (byte)((g << 2) | (g >> 4));
-                _frameBuffer[dst++] = (byte)((r << 3) | (r >> 2));
-                _frameBuffer[dst++] = 0;
+                _nativeBuffer[dst++] = (byte)((b << 3) | (b >> 2));
+                _nativeBuffer[dst++] = (byte)((g << 2) | (g >> 4));
+                _nativeBuffer[dst++] = (byte)((r << 3) | (r >> 2));
+                _nativeBuffer[dst++] = 0;
             }
         }
     }
@@ -402,7 +401,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (lut is null)
             return;
 
-        var buf = _frameBuffer;
+        var buf = _nativeBuffer;
         int n = pixelCount * 4;
         for (int i = 0; i + 2 < n; i += 4)
         {
