@@ -63,14 +63,22 @@ public partial class PreferencesWindow : Window
         VersionText.Text = $"Version {UpdateService.CurrentVersion}";
         CheckUpdatesBox.IsChecked = services.Settings.CheckForUpdates;
         Hardware3dfxBox.IsChecked = services.Settings.Hardware3dfx;
-        RefreshShaderDownloadStatus();
         _ = RefreshLatestVersionAsync(); // populate "latest on GitHub" when the window opens
 
         UpdateCloudUi();
 
-        DownloadList.ItemsSource = AssetManifest.All
+        var downloadRows = AssetManifest.All
             .Select(a => new DownloadRow(a, _services.Downloads.IsInstalled(a)))
             .ToList();
+        // CRT shaders sit right after the controller-names (SDL3) row — same list, custom download.
+        var paths = _services.Paths;
+        downloadRows.Add(new DownloadRow(
+            "CRT shaders",
+            "The libretro slang shader collection (CRT, scanlines, monitors) plus the librashader engine. Large one-time download; pick one in-game with the shader key.",
+            Effects.Librashader.ShaderDownloader.IsInstalled(paths.SlangShaderRoot, paths.LibrashaderDllPath),
+            progress => Task.Run(() => Effects.Librashader.ShaderDownloader.DownloadAsync(
+                paths.SlangShaderRoot, paths.LibrashaderDllPath, progress))));
+        DownloadList.ItemsSource = downloadRows;
 
         bool hasRoms = _services.SystemFiles.HasMt32;
         Set(Mt32RomStatus,
@@ -338,10 +346,18 @@ public partial class PreferencesWindow : Window
             return;
 
         row.IsBusy = true;
+        if (row.CustomDownload is { } custom)
+        {
+            try { await custom(msg => Dispatcher.Invoke(() => row.SetProgress(msg))); row.SetResult(true, null); }
+            catch (Exception ex) { row.SetResult(false, ex.Message); }
+            row.IsBusy = false;
+            return;
+        }
+
         var progress = new Progress<DownloadProgress>(p =>
             row.SetProgress(p.Fraction is double f ? $"Downloading… {f:P0}" : "Downloading…"));
 
-        var result = await _services.Downloads.DownloadAsync(row.Asset, progress);
+        var result = await _services.Downloads.DownloadAsync(row.Asset!, progress);
         row.SetResult(result.Success, result.Error);
         row.IsBusy = false;
     }
@@ -573,35 +589,4 @@ public partial class PreferencesWindow : Window
         _services.SettingsStore.Save(_services.Settings);
     }
 
-    private void RefreshShaderDownloadStatus()
-    {
-        var p = _services.Paths;
-        bool installed = Effects.Librashader.ShaderDownloader.IsInstalled(p.SlangShaderRoot, p.LibrashaderDllPath);
-        ShaderDownloadButton.Content = installed ? "Re-download" : "Download";
-        if (installed && string.IsNullOrEmpty(ShaderDownloadStatus.Text))
-            ShaderDownloadStatus.Text = "Installed.";
-    }
-
-    private async void OnDownloadShaders(object sender, RoutedEventArgs e)
-    {
-        ShaderDownloadButton.IsEnabled = false;
-        var p = _services.Paths;
-        try
-        {
-            // Download + extract off the UI thread (ZipFile extraction is synchronous and large).
-            await Task.Run(() => Effects.Librashader.ShaderDownloader.DownloadAsync(
-                p.SlangShaderRoot, p.LibrashaderDllPath,
-                msg => Dispatcher.Invoke(() => ShaderDownloadStatus.Text = msg)));
-            ShaderDownloadStatus.Text = "Shaders installed.";
-        }
-        catch (Exception ex)
-        {
-            ShaderDownloadStatus.Text = $"Download failed: {ex.Message}";
-        }
-        finally
-        {
-            ShaderDownloadButton.IsEnabled = true;
-            RefreshShaderDownloadStatus();
-        }
-    }
 }
