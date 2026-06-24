@@ -35,6 +35,7 @@ internal sealed class GlHwRender : IDisposable
 
     private IntPtr _readback;       // persistent BGRA buffer (top-down, alpha forced 0xFF)
     private int _readbackBytes;
+    private bool _fbLogged, _frameLogged;
 
     public bool Active { get; private set; }
     public IntPtr FramePtr => _readback;
@@ -70,7 +71,11 @@ internal sealed class GlHwRender : IDisposable
         _coreContextReset = reset != IntPtr.Zero ? Marshal.GetDelegateForFunctionPointer<ContextResetT>(reset) : null;
         _coreContextDestroy = destroy != IntPtr.Zero ? Marshal.GetDelegateForFunctionPointer<ContextResetT>(destroy) : null;
 
-        _getFramebuffer = () => _fboId;
+        _getFramebuffer = () =>
+        {
+            if (!_fbLogged) { _fbLogged = true; Log($"core called get_current_framebuffer -> {_fboId}"); }
+            return _fboId;
+        };
         _getProcAddress = ResolveProc;
         _fbHandle = GCHandle.Alloc(_getFramebuffer);
         _paHandle = GCHandle.Alloc(_getProcAddress);
@@ -131,12 +136,42 @@ internal sealed class GlHwRender : IDisposable
         }
         finally { Marshal.FreeHGlobal(tmp); }
 
+        if (!_frameLogged)
+        {
+            _frameLogged = true;
+            // Compare our FBO vs the default framebuffer (FBO 0): tells us whether the core actually
+            // rendered into the FBO we handed it, or to the default backbuffer instead.
+            Log($"first HW frame {width}x{height}: ourFbo(id={_fboId}) nonBlack={SampleNonBlack(_fboId, width, height)}, " +
+                $"defaultFbo(0) nonBlack={SampleNonBlack(0, width, height)}");
+        }
+
         FrameWidth = width;
         FrameHeight = height;
         return true;
     }
 
     private const uint GlBindReadTarget = 0x8CA8; // GL_READ_FRAMEBUFFER
+
+    // Diagnostic: read a framebuffer and report whether any sampled pixel is non-black.
+    private bool SampleNonBlack(uint fbo, int width, int height)
+    {
+        int bytes = width * height * 4;
+        IntPtr buf = Marshal.AllocHGlobal(bytes);
+        try
+        {
+            Gl.glBindFramebuffer(GlBindReadTarget, fbo);
+            Gl.glReadPixels(0, 0, width, height, Gl.GL_BGRA, Gl.GL_UNSIGNED_BYTE, buf);
+            Gl.glBindFramebuffer(GlBindReadTarget, 0);
+            unsafe
+            {
+                byte* p = (byte*)buf;
+                for (int i = 0; i + 2 < bytes; i += 4096)
+                    if (p[i] != 0 || p[i + 1] != 0 || p[i + 2] != 0) return true;
+            }
+            return false;
+        }
+        finally { Marshal.FreeHGlobal(buf); }
+    }
 
     // ── Context + FBO ─────────────────────────────────────────────────────────────────────────
     private bool CreateContext()
