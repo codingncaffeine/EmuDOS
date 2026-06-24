@@ -641,7 +641,7 @@ public partial class MainWindow : Window
 
     private void OnBoxMouseEnter(object sender, MouseEventArgs e)
     {
-        if (Vm is null || Vm.IsEditMode)
+        if (Vm is null || Vm.IsEditMode || _openCard is not null)
             return;
         if (sender is not FrameworkElement { DataContext: GameTile tile } element)
             return;
@@ -673,7 +673,7 @@ public partial class MainWindow : Window
 
     private async void ShowHoverPreview(GameTile tile, FrameworkElement element)
     {
-        if (_noSnap.Contains(tile.Id))
+        if (_noSnap.Contains(tile.Id) || _openCard is not null)
             return;
         var services = ((App)Application.Current).Services;
         var snapPath = Path.Combine(services.Paths.SnapsDir, SnapKeyFor(tile) + ".mp4");
@@ -791,6 +791,8 @@ public partial class MainWindow : Window
     private void OpenGameCard(GameTile tile)
     {
         _openCard?.Close();
+        _hoverTimer?.Stop();
+        HideHoverPreview(); // a card takes over — no hover monitor behind it
         var services = ((App)Application.Current).Services;
 
         var overflow = new List<(string, Action)>
