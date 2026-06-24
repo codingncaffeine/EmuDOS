@@ -13,6 +13,9 @@
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23" />
     <!-- In-app manual (PDF) viewer; renders via the Windows-provided Edge WebView2 runtime. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
+    <!-- D3D11 runtime for libretro slang shaders (librashader): CPU frame -> GPU shader chain -> CPU. -->
+    <PackageReference Include="Vortice.Direct3D11" Version="3.6.2" />
+    <PackageReference Include="Vortice.DXGI" Version="3.6.2" />
   </ItemGroup>
 
   <ItemGroup>
