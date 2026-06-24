@@ -197,11 +197,16 @@ public sealed class GitHubSyncService
                 var stateFiles = Directory.Exists(savesDir)
                     ? Directory.EnumerateFiles(savesDir, "state_*").ToList()
                     : new List<string>();
+                // dosbox_pure's Iso/OS save overlay (the writable union) — the in-game saves for disc
+                // games live in here rather than in content/.
+                var pureSaves = Directory.Exists(savesDir)
+                    ? Directory.EnumerateFiles(savesDir, "*.pure.zip").ToList()
+                    : new List<string>();
                 var notes = Path.Combine(gameDir, "notes.md");
                 var contentDir = Path.Combine(gameDir, "content");
                 // In-game saves a folder game wrote in place (new/changed content since the import baseline).
                 var ingame = EmuDOS.Core.Library.ContentBaseline.DiffSaves(contentDir, savesDir);
-                if (stateFiles.Count == 0 && !File.Exists(notes) && ingame.Count == 0)
+                if (stateFiles.Count == 0 && !File.Exists(notes) && ingame.Count == 0 && pureSaves.Count == 0)
                     continue;
 
                 progress?.Report($"Syncing {name}…");
@@ -229,6 +234,15 @@ public sealed class GitHubSyncService
                     { up++; ingameUp++; }
                 }
 
+                // Iso/OS save overlay: changes as you play, so overwrite the cloud copy when it differs.
+                int pureUp = 0;
+                foreach (var pure in pureSaves)
+                {
+                    var bytes = File.ReadAllBytes(pure);
+                    if (await PutIfChanged($"saves/{name}/{Path.GetFileName(pure)}", bytes, () => Wrap(bytes)).ConfigureAwait(false))
+                    { up++; pureUp++; }
+                }
+
                 bool notesUp = false;
                 if (File.Exists(notes))
                 {
@@ -237,8 +251,8 @@ public sealed class GitHubSyncService
                     if (notesUp)
                         up++;
                 }
-                if (gameUp > 0 || ingameUp > 0 || notesUp)
-                    _log($"Pushed {name}: {gameUp} state(s), {ingameUp} save(s){(notesUp ? " + notes" : "")}.");
+                if (gameUp > 0 || ingameUp > 0 || pureUp > 0 || notesUp)
+                    _log($"Pushed {name}: {gameUp} state(s), {ingameUp + pureUp} save(s){(notesUp ? " + notes" : "")}.");
             }
 
             SaveManifest(manifestPath, manifest);
