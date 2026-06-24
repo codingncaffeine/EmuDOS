@@ -151,6 +151,21 @@
                                  Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}"/>
                 </Grid>
             </Border>
+
+            <!-- Cloud sync: its own line so launch art/metadata status doesn't clobber it. -->
+            <Border Background="{StaticResource BgSecondary}" Padding="14,5">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CloudSyncStatus}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding CloudSyncStatus}" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+            </Border>
         </StackPanel>
 
         <!-- Hover preview: a Trinitron monitor showing the game's video snap (video behind the frame's

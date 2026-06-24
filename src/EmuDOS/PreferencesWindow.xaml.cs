@@ -481,6 +481,7 @@ public partial class PreferencesWindow : Window
     private async void OnSyncNow(object sender, RoutedEventArgs e)
     {
         SyncNowButton.IsEnabled = false;
+        CloudStatus.Text = "Syncing…"; // immediate feedback before the first network round-trip
         var progress = new System.Progress<string>(s => CloudStatus.Text = s);
         try
         {

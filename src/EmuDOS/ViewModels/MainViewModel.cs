@@ -67,6 +67,10 @@ public sealed partial class MainViewModel : ObservableObject
         _controllers.Start();
     }
 
+    // Cloud-sync's own status line (separate from the shared Status so launch art/metadata messages
+    // don't clobber it). Empty = hidden.
+    [ObservableProperty] private string _cloudSyncStatus = "";
+
     // If connected to GitHub, sync saves in the background at launch — never on the UI thread.
     private void StartAutoCloudSync()
     {
@@ -81,22 +85,28 @@ public sealed partial class MainViewModel : ObservableObject
             ? null : EmuDOS.Metadata.CloudCrypto.DeriveKey(s.CloudEncryptionPassphrase);
         var log = _services.CloudLog;
         var gh = new EmuDOS.Metadata.GitHubSyncService(log.Info);
+        var progress = new Progress<string>(msg => Ui(() => CloudSyncStatus = $"☁ {msg}"));
 
         _ = Task.Run(async () =>
         {
             try
             {
                 log.Info("Auto-sync at launch starting…");
-                Ui(() => Report("Syncing saves…", busy: true));
-                var r = await gh.SyncAsync(token, login, repo, gameboxesDir, dbPath, encKey: key);
-                Ui(() => Report(r.Ok
-                    ? $"Saves synced — {r.Uploaded} uploaded, {r.Downloaded} downloaded."
-                    : $"Cloud sync failed: {r.Error}", busy: false));
+                Ui(() => CloudSyncStatus = "☁ Syncing saves…");
+                var r = await gh.SyncAsync(token, login, repo, gameboxesDir, dbPath, progress, encKey: key);
+                Ui(() => CloudSyncStatus = r.Ok
+                    ? $"☁ Saves synced — {r.Uploaded} uploaded, {r.Downloaded} downloaded"
+                    : $"☁ Cloud sync failed: {r.Error}");
+                if (r.Ok)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(6));
+                    Ui(() => { if (CloudSyncStatus.StartsWith("☁ Saves synced")) CloudSyncStatus = ""; });
+                }
             }
             catch (Exception ex)
             {
                 log.Info($"Auto-sync error: {ex.Message}");
-                Ui(() => Report($"Cloud sync failed: {ex.Message}", busy: false));
+                Ui(() => CloudSyncStatus = $"☁ Cloud sync failed: {ex.Message}");
             }
         });
     }
