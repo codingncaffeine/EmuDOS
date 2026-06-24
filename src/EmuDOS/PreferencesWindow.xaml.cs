@@ -63,6 +63,7 @@ public partial class PreferencesWindow : Window
         VersionText.Text = $"Version {UpdateService.CurrentVersion}";
         CheckUpdatesBox.IsChecked = services.Settings.CheckForUpdates;
         Hardware3dfxBox.IsChecked = services.Settings.Hardware3dfx;
+        RefreshShaderDownloadStatus();
         _ = RefreshLatestVersionAsync(); // populate "latest on GitHub" when the window opens
 
         UpdateCloudUi();
@@ -570,5 +571,37 @@ public partial class PreferencesWindow : Window
     {
         _services.Settings.Hardware3dfx = Hardware3dfxBox.IsChecked == true;
         _services.SettingsStore.Save(_services.Settings);
+    }
+
+    private void RefreshShaderDownloadStatus()
+    {
+        var p = _services.Paths;
+        bool installed = Effects.Librashader.ShaderDownloader.IsInstalled(p.SlangShaderRoot, p.LibrashaderDllPath);
+        ShaderDownloadButton.Content = installed ? "Re-download" : "Download";
+        if (installed && string.IsNullOrEmpty(ShaderDownloadStatus.Text))
+            ShaderDownloadStatus.Text = "Installed.";
+    }
+
+    private async void OnDownloadShaders(object sender, RoutedEventArgs e)
+    {
+        ShaderDownloadButton.IsEnabled = false;
+        var p = _services.Paths;
+        try
+        {
+            // Download + extract off the UI thread (ZipFile extraction is synchronous and large).
+            await Task.Run(() => Effects.Librashader.ShaderDownloader.DownloadAsync(
+                p.SlangShaderRoot, p.LibrashaderDllPath,
+                msg => Dispatcher.Invoke(() => ShaderDownloadStatus.Text = msg)));
+            ShaderDownloadStatus.Text = "Shaders installed.";
+        }
+        catch (Exception ex)
+        {
+            ShaderDownloadStatus.Text = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            ShaderDownloadButton.IsEnabled = true;
+            RefreshShaderDownloadStatus();
+        }
     }
 }

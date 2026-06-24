@@ -283,6 +283,17 @@
                     <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,8"
                                Text="Roland's copyrighted firmware — we can't distribute it. Supply your own by dragging the .rom files (MT-32 or CM-32L), or a folder containing them, anywhere onto EmuDOS."/>
                     <TextBlock x:Name="Mt32RomStatus" FontSize="11"/>
+
+                    <Separator Margin="0,16,0,16" Background="{StaticResource BorderNormal}"/>
+
+                    <TextBlock Text="CRT shaders" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,8"
+                               Text="Download the libretro slang shader collection (CRT, scanlines, monitors) plus the librashader engine. A large one-time download; once installed, pick a shader in-game with the shader key."/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="ShaderDownloadButton" Content="Download" Padding="16,6" Click="OnDownloadShaders"/>
+                        <TextBlock x:Name="ShaderDownloadStatus" VerticalAlignment="Center" Margin="12,0,0,0"
+                                   FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </TabItem>
