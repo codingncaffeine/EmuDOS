@@ -18,11 +18,6 @@
     <PackageReference Include="Vortice.DXGI" Version="3.6.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Compiled CRT pixel shaders (ps_3_0) loaded by the WPF ShaderEffect classes. -->
-    <Resource Include="Shaders\Compiled\*.ps" />
-  </ItemGroup>
-
   <!-- App-owned art embedded in the exe (the shelf backdrop). -->
   <ItemGroup>
     <Resource Include="..\..\Assets\bookshelf.png" Link="Assets\bookshelf.png" />

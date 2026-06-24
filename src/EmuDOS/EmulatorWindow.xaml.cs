@@ -52,7 +52,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private readonly Key _pauseKey;
     private readonly Key _rewindKey;
     private readonly Key _shaderCycleKey;
-    private EmuDOS.Effects.VideoShader _shader;
+    // Slang CRT shader (librashader). _desiredPreset (UI) is a slang relative path, "" = off; the emu
+    // thread syncs _activePreset and owns the D3D11 ShaderRenderer.
+    private volatile string _desiredPreset = "";
+    private string _activePreset = "\0"; // sentinel forces the first sync
+    private Effects.Librashader.ShaderRenderer? _shaderRenderer;
+    private System.Collections.Generic.List<string>? _presetCycle;
     private bool _isPaused;
     private volatile bool _menuHeld; // mapped to the gamepad L3 button, which opens dosbox's menu
 
@@ -108,9 +113,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _pauseKey = ParseKey(settings.PauseKey, Key.Pause);
         _rewindKey = ParseKey(settings.RewindKey, Key.F4);
         _shaderCycleKey = ParseKey(settings.ShaderCycleKey, Key.F3);
-        // Per-game only: no saved shader = none (the in-game F3 cycle sets and saves it per game).
-        var perGameShader = ((App)Application.Current).Services.Store.ReadState(_instance.GameboxPath).Shader;
-        _shader = EmuDOS.Effects.VideoShaders.Parse(perGameShader);
+        // Per-game slang shader preset (relative path under the downloaded pack), "" = none. Set by the
+        // shader-cycle key and saved per game. Old WPF-shader values (e.g. "Crt") just won't resolve.
+        _desiredPreset = ((App)Application.Current).Services.Store.ReadState(_instance.GameboxPath).Shader ?? "";
         // Holding fast-forward/slow-motion/rewind across a focus change would otherwise stick; reset it.
         Deactivated += (_, _) => { _session?.SetSpeed(1.0); _session?.SetRewinding(false); };
 
@@ -205,8 +210,54 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             _frameHeight = h;
         }
 
+        // Slang shader (librashader): run on this (emu) thread; the shaded result replaces the frame
+        // buffer so the present, recording and screenshot paths use it unchanged. Reads _frameBuffer
+        // outside the lock — safe (only this serial thread writes it; RenderFrame only reads).
+        SyncShaderPreset();
+        if (_shaderRenderer is { IsReady: true })
+        {
+            var shaded = _shaderRenderer.Process(_frameBuffer, w, h, w * 4, isBgr32: true, out int sw, out int sh);
+            if (shaded != null && sw > 0 && sh > 0)
+                lock (_frameLock)
+                {
+                    int need = sw * sh * 4;
+                    if (_frameBuffer.Length < need) _frameBuffer = new byte[need];
+                    Buffer.BlockCopy(shaded, 0, _frameBuffer, 0, need);
+                    _frameWidth = sw;
+                    _frameHeight = sh;
+                }
+        }
+
         if (Interlocked.CompareExchange(ref _renderQueued, 1, 0) == 0)
             Dispatcher.BeginInvoke(RenderFrame);
+    }
+
+    // Apply the per-game preset change (emu thread): (re)build the D3D11 librashader chain. "" = off.
+    private void SyncShaderPreset()
+    {
+        if (_desiredPreset == _activePreset)
+            return;
+        _activePreset = _desiredPreset;
+        _shaderRenderer?.Dispose();
+        _shaderRenderer = null;
+        if (string.IsNullOrEmpty(_desiredPreset))
+            return;
+
+        var paths = ((App)Application.Current).Services.Paths;
+        var presetPath = Effects.Librashader.ShaderCatalog.Resolve(paths.SlangShaderRoot, _desiredPreset);
+        if (presetPath is null)
+        {
+            _log.Info($"[shader] preset not found: {_desiredPreset}");
+            return;
+        }
+        var r = new Effects.Librashader.ShaderRenderer();
+        if (r.Initialize(paths.LibrashaderDllPath, presetPath))
+            _shaderRenderer = r;
+        else
+        {
+            _log.Info($"[shader] init failed ({_desiredPreset}): {r.LastError}");
+            r.Dispose();
+        }
     }
 
     public void OnCoreLog(int level, string message)
@@ -373,7 +424,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             {
                 _bitmap = new WriteableBitmap(_frameWidth, _frameHeight, 96, 96, PixelFormats.Bgr32, null);
                 Screen.Source = _bitmap;
-                ApplyShader(); // (re)build the CRT effect at the new source resolution
             }
 
             _bitmap.WritePixels(
@@ -671,25 +721,33 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         };
     }
 
-    // Apply the current CRT shader to the video Image, sized to the source resolution (null = off).
-    // Scanline/mask shaders only suit low-res retro modes, so they're skipped at high resolution —
-    // a Windows 9x desktop or SVGA mode (800x600+), where scanlines look wrong. Re-evaluated whenever
-    // the resolution changes, so a game that boots to DOS then into Windows drops the shader.
-    private void ApplyShader()
-    {
-        var effective = _frameHeight is > 0 and <= 480 ? _shader : EmuDOS.Effects.VideoShader.Off;
-        Screen.Effect = EmuDOS.Effects.VideoShaders.Create(effective, _frameWidth, _frameHeight);
-    }
-
-    // Cycle Off -> Scanlines -> CRT live, show the name, and remember it as the default.
+    // Cycle the CRT shader live: Off -> each downloaded "crt" slang preset. Persisted per game; the
+    // emu thread rebuilds the librashader chain on the next frame (see SyncShaderPreset).
     private void CycleShader()
     {
-        _shader = EmuDOS.Effects.VideoShaders.Next(_shader);
-        ApplyShader();
-        ShowHint($"Shader: {EmuDOS.Effects.VideoShaders.DisplayName(_shader)}", 1.2);
-        // Remember per game (right-click can also set it pre-launch).
+        var paths = ((App)Application.Current).Services.Paths;
+        _presetCycle ??= BuildPresetCycle(paths.SlangShaderRoot);
+        if (_presetCycle.Count <= 1)
+        {
+            ShowHint("No CRT shaders — download them in Preferences → Downloads", 2.2);
+            return;
+        }
+        int idx = _presetCycle.FindIndex(p => string.Equals(p, _desiredPreset, StringComparison.OrdinalIgnoreCase));
+        _desiredPreset = _presetCycle[(idx + 1) % _presetCycle.Count];
+        var name = _desiredPreset.Length == 0 ? "Off" : System.IO.Path.GetFileNameWithoutExtension(_desiredPreset);
+        ShowHint($"Shader: {name}", 1.4);
         var store = ((App)Application.Current).Services.Store;
-        store.WriteState(_instance.GameboxPath, store.ReadState(_instance.GameboxPath) with { Shader = _shader.ToString() });
+        store.WriteState(_instance.GameboxPath, store.ReadState(_instance.GameboxPath) with { Shader = _desiredPreset });
+    }
+
+    // Off + the "crt" category of the downloaded slang pack (empty list when nothing's installed).
+    private static System.Collections.Generic.List<string> BuildPresetCycle(string slangRoot)
+    {
+        var list = new System.Collections.Generic.List<string> { "" }; // Off
+        foreach (var p in Effects.Librashader.ShaderCatalog.GetDownloaded(slangRoot))
+            if (p.Category.Equals("crt", StringComparison.OrdinalIgnoreCase))
+                list.Add(p.RelativePath);
+        return list;
     }
 
     private void TogglePause()
@@ -806,25 +864,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             return;
         try
         {
-            var services = ((App)Application.Current).Services;
-            BitmapSource source;
-            // Native-res clone only when there's no shader — a CRT shader is a display-space effect, so a
-            // shaded screenshot must capture the rendered Image (which carries the Effect) at its on-screen
-            // size, not the raw frame buffer.
-            if (services.Settings.ScreenshotOriginalSize && _shader == EmuDOS.Effects.VideoShader.Off)
-            {
-                var snap = _bitmap.Clone();
-                snap.Freeze();
-                source = snap;
-            }
-            else
-            {
-                int w = Math.Max(1, (int)Screen.ActualWidth), h = Math.Max(1, (int)Screen.ActualHeight);
-                var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-                rtb.Render(Screen);
-                rtb.Freeze();
-                source = rtb;
-            }
+            // The frame buffer already carries the shader (librashader runs before present), so a clone
+            // of the displayed bitmap is the shaded image at its rendered resolution.
+            BitmapSource source = _bitmap.Clone();
+            source.Freeze();
 
             var dir = new Core.Library.Gamebox(_instance.GameboxPath).ScreenshotsDir;
             System.IO.Directory.CreateDirectory(dir);
@@ -1080,6 +1123,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _lcdWindow?.Close();
         _session.Stop();
         _session.Dispose();
+        _shaderRenderer?.Dispose(); // emu thread has stopped — safe to release the D3D11 chain here
+        _shaderRenderer = null;
         _audioOut?.Stop();
         _audioOut?.Dispose();
         _audioOut = null;
