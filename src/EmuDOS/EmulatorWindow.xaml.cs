@@ -39,11 +39,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     private Core.Media.RecordingService? _recorder;
     private int _recWidth, _recHeight;
-    // Shaded recording: capture the rendered (CRT-shaded) Image at display size each frame.
-    private bool _recShaded;
-    private RenderTargetBitmap? _recRtb;
-    private byte[]? _recPixels;
-    private int _recStride;
 
     private readonly Key _screenshotKey;
     private readonly Key _recordKey;
@@ -384,23 +379,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             _bitmap.WritePixels(
                 new Int32Rect(0, 0, _frameWidth, _frameHeight), _frameBuffer, _frameWidth * 4, 0);
 
-            // Recording. With a shader active, capture the rendered (shaded) Image at display size so
-            // the video matches what's on screen; otherwise feed the raw native frame (cheaper, and
-            // FFmpeg nearest-upscales it to the displayed size).
+            // Recording: feed the raw native frame (FFmpeg nearest-upscales to the displayed size).
             var recorder = _recorder;
-            if (recorder?.IsRecording == true)
-            {
-                if (_recShaded && _recRtb is not null && _recPixels is not null)
-                {
-                    _recRtb.Render(Screen);
-                    _recRtb.CopyPixels(_recPixels, _recStride, 0);
-                    recorder.WriteVideoFrame(_recPixels, _recPixels.Length);
-                }
-                else if (!_recShaded && _frameWidth == _recWidth && _frameHeight == _recHeight)
-                {
-                    recorder.WriteVideoFrame(_frameBuffer, _frameWidth * _frameHeight * 4);
-                }
-            }
+            if (recorder?.IsRecording == true && _frameWidth == _recWidth && _frameHeight == _recHeight)
+                recorder.WriteVideoFrame(_frameBuffer, _frameWidth * _frameHeight * 4);
         }
     }
 
@@ -871,9 +853,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         {
             var recorder = _recorder;
             _recorder = null;
-            _recShaded = false;
-            _recRtb = null;
-            _recPixels = null;
             RecIndicator.Visibility = Visibility.Collapsed;
             ShowHint("Encoding video…", 2.0);
             System.Threading.Tasks.Task.Run(() =>
@@ -900,28 +879,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
         _recorder = new Core.Media.RecordingService(ffmpeg);
         int dispW = (int)Screen.ActualWidth & ~1, dispH = (int)Screen.ActualHeight & ~1; // even dims for the encoder
-        string? error;
-        if (_shader != EmuDOS.Effects.VideoShader.Off && dispW > 0 && dispH > 0)
-        {
-            // Shaded: each frame we render the displayed (shaded) Image to this RTB and feed those pixels.
-            _recShaded = true;
-            _recWidth = dispW;
-            _recHeight = dispH;
-            _recRtb = new RenderTargetBitmap(dispW, dispH, 96, 96, PixelFormats.Pbgra32);
-            _recStride = dispW * 4;
-            _recPixels = new byte[dispH * _recStride];
-            error = _recorder.Start(path2, dispW, dispH, _sampleRate, services.Settings.VideoQuality);
-        }
-        else
-        {
-            // Raw native frames; FFmpeg nearest-upscales them to the displayed size.
-            _recShaded = false;
-            _recRtb = null;
-            _recPixels = null;
-            _recWidth = _frameWidth;
-            _recHeight = _frameHeight;
-            error = _recorder.Start(path2, _recWidth, _recHeight, _sampleRate, services.Settings.VideoQuality, dispW, dispH);
-        }
+        // Record the raw native frames; FFmpeg nearest-upscales to the displayed size. (Baking a CRT
+        // shader into video is left to the GPU/OpenGL channel — the software-shader-per-frame capture
+        // froze the app.)
+        _recWidth = _frameWidth;
+        _recHeight = _frameHeight;
+        var error = _recorder.Start(path2, _recWidth, _recHeight, _sampleRate, services.Settings.VideoQuality, dispW, dispH);
         if (error is not null)
         {
             _recorder = null;
