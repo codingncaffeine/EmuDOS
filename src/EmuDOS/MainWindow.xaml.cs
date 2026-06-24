@@ -369,7 +369,19 @@ public partial class MainWindow : Window
         foreach (var exe in state.KnownExecutables.Concat(scanned))
             if (!string.IsNullOrWhiteSpace(exe) && seen.Add(exe))
                 ordered.Add(exe);
-        return ordered;
+        // Float 3dfx/Glide executables to the top — for games that ship a separate hardware-Voodoo
+        // build (a common pattern), it's the easy-to-miss program that actually uses the 3dfx card.
+        // OrderByDescending is stable, so everything else keeps its order. (Games with built-in 3dfx,
+        // like Descent II, have no such exe and are unaffected.)
+        return ordered.OrderByDescending(Is3dfxExecutable).ToList();
+    }
+
+    /// <summary>Heuristic: an executable likely built to use a 3dfx/Voodoo (Glide) card.</summary>
+    internal static bool Is3dfxExecutable(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+        return name.Contains("3dfx") || name.Contains("glide") || name.Contains("voodoo")
+            || name.StartsWith("gl") || name.EndsWith("gl");
     }
 
     private async Task OpenManualAsync(GameTile tile)
