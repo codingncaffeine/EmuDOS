@@ -445,15 +445,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             e.Handled = true;
             return;
         }
-        // Ctrl+Shift+C copies the DOS text screen to the clipboard (Ctrl+Shift, so DOS's Ctrl+C break
-        // still works).
-        if (effective == Key.C && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)
-            && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
-        {
-            CopyScreenToClipboard();
-            e.Handled = true;
-            return;
-        }
 
         // Bound hotkeys are handled here and not forwarded to the game.
         if (effective == _screenshotKey)
@@ -627,47 +618,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (wasDown)
             _keyEvents.Enqueue(new KeyEvent(false, (uint)key, 0, Modifiers()));
         e.Handled = true;
-    }
-
-    /// <summary>Copy the DOS text-mode screen to the clipboard (Ctrl+Shift+C). The text screen is at
-    /// B800:0000 (2 bytes/cell: character + attribute); dimensions come from the BIOS data area. Only
-    /// meaningful in text mode, and only when the core exposes that video memory.</summary>
-    private void CopyScreenToClipboard()
-    {
-        int cols = 80, rows = 25;
-        var c = _session.ReadMemory(0x44A, 2); // BIOS: text columns (word)
-        if (c is { Length: 2 })
-        {
-            int v = c[0] | (c[1] << 8);
-            if (v is > 0 and <= 240) cols = v;
-        }
-        var r = _session.ReadMemory(0x484, 1); // BIOS: rows - 1 (byte)
-        if (r is { Length: 1 } && r[0] is > 0 and < 80) rows = r[0] + 1;
-
-        var screen = _session.ReadMemory(0xB8000, cols * rows * 2);
-        if (screen is null || screen.Length < cols * rows * 2)
-        {
-            ShowHint("Copy unavailable (text mode only)");
-            return;
-        }
-
-        var sb = new System.Text.StringBuilder();
-        for (int y = 0; y < rows; y++)
-        {
-            var line = new char[cols];
-            for (int x = 0; x < cols; x++)
-            {
-                byte ch = screen[(y * cols + x) * 2];
-                line[x] = ch is >= 32 and < 127 ? (char)ch : ' ';
-            }
-            sb.AppendLine(new string(line).TrimEnd());
-        }
-        try
-        {
-            Clipboard.SetText(sb.ToString().TrimEnd() + Environment.NewLine);
-            ShowHint("Screen copied to clipboard");
-        }
-        catch { ShowHint("Copy failed"); }
     }
 
     /// <summary>Type clipboard text into DOS as paced keystrokes (Boxer-style paste). Bound to Ctrl+V.</summary>
