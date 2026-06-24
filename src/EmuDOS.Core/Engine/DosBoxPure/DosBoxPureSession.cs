@@ -23,6 +23,7 @@ public sealed class DosBoxPureSession : IDosSession
     private readonly IEngineHost _host;
     private readonly string _corePath;
     private readonly string _systemDir;
+    private readonly bool _hardware3dfx;
     private readonly ConcurrentQueue<Action> _pending = new();
     private volatile IReadOnlyDictionary<ulong, byte[]>? _frozen; // cheat freeze set (swapped wholesale)
     private byte[]? _initialState; // a save state to restore once the game has booted (launch-into-state)
@@ -42,12 +43,14 @@ public sealed class DosBoxPureSession : IDosSession
     private MouseDelta _mouse;
     private volatile EngineState _state = EngineState.Idle;
 
-    public DosBoxPureSession(GameInstance instance, IEngineHost host, string corePath, string systemDir)
+    public DosBoxPureSession(GameInstance instance, IEngineHost host, string corePath, string systemDir,
+        bool hardware3dfx = true)
     {
         _instance = instance;
         _host = host;
         _corePath = corePath;
         _systemDir = systemDir;
+        _hardware3dfx = hardware3dfx;
     }
 
     public GameInstance Instance => _instance;
@@ -203,9 +206,9 @@ public sealed class DosBoxPureSession : IDosSession
                 loadTarget = _instance.ContentPath;
             }
 
-            // OpenGL HW-render spike (opt-in via EMUDOS_GL=1): turn on dosbox_pure's hardware-OpenGL
-            // Voodoo so the core requests SET_HW_RENDER, and accept it. Otherwise the software path runs.
-            if (Environment.GetEnvironmentVariable("EMUDOS_GL") == "1")
+            // Hardware-OpenGL 3dfx/Voodoo: turn on the core's hardware-OpenGL Voodoo so it requests
+            // SET_HW_RENDER, and accept it. Non-3dfx games keep using the software video callback.
+            if (_hardware3dfx)
             {
                 _core.Options = new Dictionary<string, string>(plan.CoreOptions)
                 {

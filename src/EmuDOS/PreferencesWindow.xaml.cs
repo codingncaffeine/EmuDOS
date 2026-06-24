@@ -62,6 +62,7 @@ public partial class PreferencesWindow : Window
 
         VersionText.Text = $"Version {UpdateService.CurrentVersion}";
         CheckUpdatesBox.IsChecked = services.Settings.CheckForUpdates;
+        Hardware3dfxBox.IsChecked = services.Settings.Hardware3dfx;
         _ = RefreshLatestVersionAsync(); // populate "latest on GitHub" when the window opens
 
         UpdateCloudUi();
@@ -562,6 +563,12 @@ public partial class PreferencesWindow : Window
     private void OnToggleCheckForUpdates(object sender, RoutedEventArgs e)
     {
         _services.Settings.CheckForUpdates = CheckUpdatesBox.IsChecked == true;
+        _services.SettingsStore.Save(_services.Settings);
+    }
+
+    private void OnToggleHardware3dfx(object sender, RoutedEventArgs e)
+    {
+        _services.Settings.Hardware3dfx = Hardware3dfxBox.IsChecked == true;
         _services.SettingsStore.Save(_services.Settings);
     }
 }

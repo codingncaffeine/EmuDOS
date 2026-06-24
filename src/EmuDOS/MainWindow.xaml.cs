@@ -1092,7 +1092,8 @@ public partial class MainWindow : Window
             EmuDOS.Core.Library.ContentBaseline.CaptureIfMissing(instance.ContentPath, instance.SavePath);
 
         var engine = new DosBoxPureEngine(
-            services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir);
+            services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir,
+            services.Settings.Hardware3dfx);
         services.Library.RecordPlay(tile.Id);
 
         new EmulatorWindow(engine, instance, tile.Id, loadState) { Owner = this }.Show();

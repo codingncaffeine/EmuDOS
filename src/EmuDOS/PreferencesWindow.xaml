@@ -50,6 +50,9 @@
                     <ComboBox x:Name="MidiBox" Width="200" HorizontalAlignment="Left" Foreground="{StaticResource TextPrimary}"/>
 
                     <CheckBox x:Name="AspectBox" Content="Correct aspect ratio" Margin="0,16,0,0"/>
+                    <CheckBox x:Name="Hardware3dfxBox" Content="Hardware 3dfx (OpenGL)" Margin="0,10,0,0"
+                              Click="OnToggleHardware3dfx"
+                              ToolTip="Render 3dfx/Voodoo games through hardware OpenGL (sharper). Off uses software Voodoo. Non-3dfx games are unaffected."/>
 
                     <TextBlock Text="Display (EmuDOS)" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}" Margin="0,18,0,2"/>
                     <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"

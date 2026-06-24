@@ -76,6 +76,10 @@ public sealed class UserSettings
     /// <summary>The CRT video shader applied to games: "Off", "Scanlines", or "Crt".</summary>
     public string VideoShader { get; set; } = "Off";
 
+    /// <summary>Render 3dfx/Voodoo games through hardware OpenGL (sharper, scalable). When off, the
+    /// core falls back to its software Voodoo renderer. Non-3dfx games are unaffected either way.</summary>
+    public bool Hardware3dfx { get; set; } = true;
+
     // --- Cloud save sync (GitHub). ---
 
     /// <summary>GitHub OAuth access token from the device-flow login (empty = not connected).</summary>
