@@ -42,6 +42,7 @@
   <!-- App logo: exe icon + a WPF resource for the window icon. -->
   <ItemGroup>
     <Resource Include="Assets\EmuDOS-Logo.png" />
+    <Resource Include="Assets\monitor.png" />
     <Resource Include="Assets\EmuDOS.ico" />
   </ItemGroup>
 
