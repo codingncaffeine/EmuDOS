@@ -691,8 +691,14 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     }
 
     // Apply the current CRT shader to the video Image, sized to the source resolution (null = off).
-    private void ApplyShader() =>
-        Screen.Effect = EmuDOS.Effects.VideoShaders.Create(_shader, _frameWidth, _frameHeight);
+    // Scanline/mask shaders only suit low-res retro modes, so they're skipped at high resolution —
+    // a Windows 9x desktop or SVGA mode (800x600+), where scanlines look wrong. Re-evaluated whenever
+    // the resolution changes, so a game that boots to DOS then into Windows drops the shader.
+    private void ApplyShader()
+    {
+        var effective = _frameHeight is > 0 and <= 480 ? _shader : EmuDOS.Effects.VideoShader.Off;
+        Screen.Effect = EmuDOS.Effects.VideoShaders.Create(effective, _frameWidth, _frameHeight);
+    }
 
     // Cycle Off -> Scanlines -> CRT live, show the name, and remember it as the default.
     private void CycleShader()
