@@ -203,7 +203,21 @@ public sealed class DosBoxPureSession : IDosSession
                 loadTarget = _instance.ContentPath;
             }
 
-            _core.Options = plan.CoreOptions;
+            // OpenGL HW-render spike (opt-in via EMUDOS_GL=1): turn on dosbox_pure's hardware-OpenGL
+            // Voodoo so the core requests SET_HW_RENDER, and accept it. Otherwise the software path runs.
+            if (Environment.GetEnvironmentVariable("EMUDOS_GL") == "1")
+            {
+                _core.Options = new Dictionary<string, string>(plan.CoreOptions)
+                {
+                    ["dosbox_pure_voodoo"] = "8mb",
+                    ["dosbox_pure_voodoo_perf"] = "4", // Hardware OpenGL
+                };
+                _core.HardwareRender = true;
+            }
+            else
+            {
+                _core.Options = plan.CoreOptions;
+            }
 
             _core.Video = (data, w, h, pitch, fmt) =>
                 _host.SubmitVideoFrame(new VideoFrame(data, w, h, pitch, fmt));
@@ -239,6 +253,9 @@ public sealed class DosBoxPureSession : IDosSession
             }
 
             var avInfo = _core.GetAvInfo();
+            if (_core.HwActive)
+                _core.HwPrepareAndReset(avInfo.MaxWidth > 0 ? avInfo.MaxWidth : 1024,
+                                        avInfo.MaxHeight > 0 ? avInfo.MaxHeight : 768);
             _host.SetAudioSampleRate((int)Math.Round(avInfo.SampleRate > 1 ? avInfo.SampleRate : 48000));
             PumpFrames(avInfo);
         }

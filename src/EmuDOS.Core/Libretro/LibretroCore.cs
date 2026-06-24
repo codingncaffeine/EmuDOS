@@ -165,6 +165,18 @@ public sealed class LibretroCore : IDisposable
 
     public VideoFrameHandler? Video { get; set; }
 
+    /// <summary>Opt-in: accept the core's OpenGL hardware-render request (for 3dfx/Voodoo + GPU
+    /// shaders). When false, SET_HW_RENDER is refused and the core uses the software path.</summary>
+    public bool HardwareRender { get; set; }
+    private GlHwRender? _hw;
+
+    /// <summary>True once an OpenGL HW context is negotiated and live.</summary>
+    public bool HwActive => _hw?.Active == true;
+
+    /// <summary>After LoadGame returns, resize the HW FBO to fit and fire the core's context_reset
+    /// (must run on the core/GL thread). No-op when HW isn't active.</summary>
+    public void HwPrepareAndReset(int maxWidth, int maxHeight) => _hw?.PrepareAndReset(maxWidth, maxHeight);
+
     public AudioFrameHandler? Audio { get; set; }
 
     public InputStateProvider? Input { get; set; }
@@ -455,8 +467,11 @@ public sealed class LibretroCore : IDisposable
                 return true;
 
             case EnvSetHwRender:
-                // Force the software path; we don't provide a GL/Vulkan context (yet).
-                return false;
+                // Opt-in OpenGL HW render; otherwise refuse and the core falls back to software.
+                if (!HardwareRender)
+                    return false;
+                _hw ??= new GlHwRender(CoreLog);
+                return _hw.Negotiate(data);
 
             case EnvSetMemoryMaps:
                 CaptureMemoryMaps(data);
@@ -520,6 +535,14 @@ public sealed class LibretroCore : IDisposable
     {
         if (data == 0)
             return; // duplicated frame
+        if (data == LibretroConstants.HwFrameBufferValid && _hw is not null)
+        {
+            // HW frame: the core rendered into our FBO. Read it back (GL_BGRA == XRGB8888 layout) and
+            // push it through the same present path as a software frame.
+            if (_hw.ReadFrame((int)width, (int)height))
+                Video?.Invoke(_hw.FramePtr, _hw.FrameWidth, _hw.FrameHeight, _hw.FrameWidth * 4, PixelFormat.Xrgb8888);
+            return;
+        }
         Video?.Invoke(data, (int)width, (int)height, (int)pitch, PixelFormat);
     }
 
@@ -576,6 +599,11 @@ public sealed class LibretroCore : IDisposable
             try { _unloadGame(); } catch { /* tearing down */ }
             _gameLoaded = false;
         }
+
+        // GL teardown (context_destroy + delete context) before deinit, on the core/GL thread.
+        // Teardown hardening (VEH for driver-thread AVs) is a later phase.
+        try { _hw?.Dispose(); } catch { /* tearing down */ }
+        _hw = null;
 
         if (_handle != 0)
         {
