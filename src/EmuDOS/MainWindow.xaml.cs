@@ -142,6 +142,31 @@ public partial class MainWindow : Window
             boxStyle.Items.Add(item);
         }
 
+        // Per-game CRT shader (overrides the global default; also cycled live in-game with the shader key).
+        var shaderMenu = new MenuItem { Header = "🖥  Shader" };
+        var shaderState = services.Store.ReadState(tile.Game.GameboxPath).Shader;
+        var currentShader = string.IsNullOrEmpty(shaderState) ? services.Settings.VideoShader : shaderState;
+        foreach (var (label, value) in new[]
+                 {
+                     ("Off", "Off"), ("Scanlines", "Scanlines"), ("CRT", "Crt"),
+                     ("Green monitor", "Green"), ("Amber monitor", "Amber"),
+                 })
+        {
+            var captured = value;
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = string.Equals(currentShader, captured, StringComparison.OrdinalIgnoreCase),
+            };
+            item.Click += (_, _) =>
+            {
+                var st = services.Store.ReadState(tile.Game.GameboxPath);
+                services.Store.WriteState(tile.Game.GameboxPath, st with { Shader = captured });
+            };
+            shaderMenu.Items.Add(item);
+        }
+
         var rename = new MenuItem { Header = "✏  Rename from ScreenScraper…" };
         rename.Click += (_, _) => RenameFromScreenScraper(tile);
 
@@ -194,6 +219,7 @@ public partial class MainWindow : Window
         menu.Items.Add(box3D);
         menu.Items.Add(customArt);
         menu.Items.Add(boxStyle);
+        menu.Items.Add(shaderMenu);
         menu.Items.Add(rename);
         menu.Items.Add(manual);
 

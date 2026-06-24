@@ -29,6 +29,10 @@ public sealed record GameUserState
     /// <c>UserSettings.Use3DBoxes</c> preference; the others force 2D or 3D for this game alone.</summary>
     public BoxStyle BoxStyle { get; init; } = BoxStyle.Default;
 
+    /// <summary>Per-game CRT shader override ("Off"/"Scanlines"/"Crt"/"Green"/"Amber"). Empty follows
+    /// the global <c>UserSettings.VideoShader</c> default.</summary>
+    public string Shader { get; init; } = "";
+
     /// <summary>Return a copy with <paramref name="executable"/> recorded as the user's chosen program.</summary>
     public GameUserState WithExecutable(string? executable)
     {

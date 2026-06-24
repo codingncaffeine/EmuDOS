@@ -113,7 +113,10 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _pauseKey = ParseKey(settings.PauseKey, Key.Pause);
         _rewindKey = ParseKey(settings.RewindKey, Key.F4);
         _shaderCycleKey = ParseKey(settings.ShaderCycleKey, Key.F3);
-        _shader = EmuDOS.Effects.VideoShaders.Parse(settings.VideoShader);
+        // Per-game shader override wins over the global default (empty = follow global).
+        var perGameShader = ((App)Application.Current).Services.Store.ReadState(_instance.GameboxPath).Shader;
+        _shader = EmuDOS.Effects.VideoShaders.Parse(
+            string.IsNullOrEmpty(perGameShader) ? settings.VideoShader : perGameShader);
         // Holding fast-forward/slow-motion/rewind across a focus change would otherwise stick; reset it.
         Deactivated += (_, _) => { _session?.SetSpeed(1.0); _session?.SetRewinding(false); };
 
@@ -697,9 +700,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _shader = EmuDOS.Effects.VideoShaders.Next(_shader);
         ApplyShader();
         ShowHint($"Shader: {EmuDOS.Effects.VideoShaders.DisplayName(_shader)}", 1.2);
-        var services = ((App)Application.Current).Services;
-        services.Settings.VideoShader = _shader.ToString();
-        services.SettingsStore.Save(services.Settings);
+        // Remember per game (right-click can also set it pre-launch).
+        var store = ((App)Application.Current).Services.Store;
+        store.WriteState(_instance.GameboxPath, store.ReadState(_instance.GameboxPath) with { Shader = _shader.ToString() });
     }
 
     private void TogglePause()
