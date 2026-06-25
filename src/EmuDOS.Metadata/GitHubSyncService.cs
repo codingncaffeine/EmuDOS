@@ -39,6 +39,22 @@ public sealed class GitHubSyncService
     // serializer). Files above this are skipped during sync — mainly OS install .pure.zip overlays.
     private const long MaxUploadBytes = 40L * 1024 * 1024;
 
+    // Per-machine token (the hostname squashed to path-safe chars). The library DB is namespaced
+    // with it so several machines / operating systems can share ONE sync repo without overwriting
+    // each other's library backup: the DB stores absolute, OS-specific paths and isn't portable
+    // across systems anyway, so each machine keeps its own. Saves stay shared (keyed by game name).
+    // Environment.MachineName is the hostname on Linux/macOS as well as Windows.
+    private static readonly string MachineSuffix = BuildMachineSuffix();
+
+    private static string BuildMachineSuffix()
+    {
+        var sb = new StringBuilder();
+        foreach (char c in Environment.MachineName.ToLowerInvariant())
+            sb.Append(char.IsLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '-');
+        var suffix = sb.ToString().Trim('-');
+        return suffix.Length == 0 ? "pc" : suffix;
+    }
+
     private readonly Action<string> _log;
     private byte[]? _encKey; // set per SyncAsync; non-null = encrypt uploads / decrypt downloads
     private string _defaultBranch = "main"; // captured from the repo; used for recursive tree listing
@@ -166,6 +182,14 @@ public sealed class GitHubSyncService
             var manifestPath = Path.Combine(Path.GetDirectoryName(dbPath) ?? string.Empty, "cloud-sync-state.json");
             var manifest = LoadManifest(manifestPath);
 
+            // Shared, in-repo manifest of mutable-save modified times (repoPath → ISO-8601 UTC).
+            // GitHub's API doesn't expose a file's modified time, so this is how machines agree on
+            // which copy of a mutable save is newest. Kept PLAINTEXT (never encrypted): it carries
+            // only timestamps, no save content, and must be readable without the passphrase. Save
+            // states are immutable slots and are NOT tracked here (they stay additive).
+            var remoteMtimes = await LoadRemoteManifestAsync(token, login, repo, ct).ConfigureAwait(false);
+            bool remoteManifestDirty = false;
+
             async Task<bool> PutIfChanged(string repoPath, byte[] rawForHash, Func<byte[]> makeUpload)
             {
                 var hash = Sha256Hex(rawForHash);
@@ -188,13 +212,42 @@ public sealed class GitHubSyncService
                 return false;
             }
 
+            // Newest-wins upload for a MUTABLE save (in-game save / .pure.zip overlay / notes):
+            // upload only when our copy is newer than the shared record, so we never clobber a
+            // newer-or-equal copy another machine already pushed. The local file's mtime drives
+            // the decision and is recorded in the shared manifest on success. A file that hasn't
+            // changed keeps its mtime, so the shared record is >= it and this no-ops (no re-push).
+            async Task<bool> PutSaveIfNewer(string repoPath, string localFullPath, byte[] raw)
+            {
+                var localMtime = File.GetLastWriteTimeUtc(localFullPath);
+                if (remoteMtimes.TryGetValue(repoPath, out var rm)
+                    && DateTime.TryParse(rm, null, System.Globalization.DateTimeStyles.RoundtripKind, out var remoteMtime)
+                    && remoteMtime >= localMtime)
+                    return false; // a newer or identical copy is already in the cloud
+                var upload = Wrap(raw);
+                if (upload.Length > MaxUploadBytes)
+                {
+                    _log($"Skipped {repoPath} — {upload.Length / (1024 * 1024)} MB is too large for cloud sync.");
+                    return false;
+                }
+                if (await PutAsync(token, login, repo, repoPath, upload, ct).ConfigureAwait(false))
+                {
+                    remoteMtimes[repoPath] = localMtime.ToString("o");
+                    remoteManifestDirty = true;
+                    return true;
+                }
+                return false;
+            }
+
             // Push the library database (gzip'd snapshot). Read with shared access — SQLite keeps the
             // live DB file open, so a plain read would fail with "in use by another process".
             if (File.Exists(dbPath))
             {
                 progress?.Report("Uploading library database…");
                 var dbBytes = ReadShared(dbPath);
-                if (await PutIfChanged("db/library.db.gz", dbBytes, () => Wrap(Gzip(dbBytes))).ConfigureAwait(false))
+                // Per-machine remote filename (db/library.<host>.db.gz): each machine owns its own
+                // DB backup in the shared repo, so two machines / OSes can never clobber each other's.
+                if (await PutIfChanged($"db/library.{MachineSuffix}.db.gz", dbBytes, () => Wrap(Gzip(dbBytes))).ConfigureAwait(false))
                 {
                     up++;
                     _log("Uploaded library database.");
@@ -241,7 +294,7 @@ public sealed class GitHubSyncService
                         _log($"WARN: upload failed for saves/{name}/{Path.GetFileName(f)}");
                 }
 
-                // In-game saves overwrite their cloud copy (they change as you play).
+                // In-game saves change as you play — newest copy wins across machines.
                 int ingameUp = 0;
                 foreach (var rel in ingame)
                 {
@@ -249,16 +302,16 @@ public sealed class GitHubSyncService
                     if (!File.Exists(full))
                         continue;
                     var bytes = File.ReadAllBytes(full);
-                    if (await PutIfChanged($"ingame/{name}/{rel}", bytes, () => Wrap(bytes)).ConfigureAwait(false))
+                    if (await PutSaveIfNewer($"ingame/{name}/{rel}", full, bytes).ConfigureAwait(false))
                     { up++; ingameUp++; }
                 }
 
-                // Iso/OS save overlay: changes as you play, so overwrite the cloud copy when it differs.
+                // Iso/OS save overlay: changes as you play — newest copy wins across machines.
                 int pureUp = 0;
                 foreach (var pure in pureSaves)
                 {
                     var bytes = File.ReadAllBytes(pure);
-                    if (await PutIfChanged($"saves/{name}/{Path.GetFileName(pure)}", bytes, () => Wrap(bytes)).ConfigureAwait(false))
+                    if (await PutSaveIfNewer($"saves/{name}/{Path.GetFileName(pure)}", pure, bytes).ConfigureAwait(false))
                     { up++; pureUp++; }
                 }
 
@@ -266,7 +319,7 @@ public sealed class GitHubSyncService
                 if (File.Exists(notes))
                 {
                     var nb = File.ReadAllBytes(notes);
-                    notesUp = await PutIfChanged($"notes/{name}.md", nb, () => Wrap(nb)).ConfigureAwait(false);
+                    notesUp = await PutSaveIfNewer($"notes/{name}.md", notes, nb).ConfigureAwait(false);
                     if (notesUp)
                         up++;
                 }
@@ -287,7 +340,12 @@ public sealed class GitHubSyncService
                 foreach (var (fname, sha) in await ListEntriesAsync(token, login, repo, $"saves/{folder}", ct).ConfigureAwait(false))
                 {
                     var local = Path.Combine(localSaves, fname);
-                    if (File.Exists(local))
+                    var repoPath = $"saves/{folder}/{fname}";
+                    // State files are immutable slots — additive, never re-downloaded. The .pure.zip
+                    // overlay is mutable, so pull it when the shared manifest says the cloud copy is
+                    // newer than ours (newest-wins), in addition to when it's missing locally.
+                    bool isPure = fname.EndsWith(".pure.zip", StringComparison.OrdinalIgnoreCase);
+                    if (File.Exists(local) && !(isPure && RemoteNewer(remoteMtimes, repoPath, local)))
                         continue;
                     var bytes = await GetBlobAsync(token, login, repo, sha, ct).ConfigureAwait(false);
                     if (bytes is null)
@@ -295,13 +353,14 @@ public sealed class GitHubSyncService
                     bytes = Unwrap(bytes);
                     if (bytes is null) // encrypted but no/wrong passphrase
                     {
-                        _log($"Skipped (can't decrypt) saves/{folder}/{fname}");
+                        _log($"Skipped (can't decrypt) {repoPath}");
                         continue;
                     }
                     Directory.CreateDirectory(localSaves);
                     File.WriteAllBytes(local, bytes);
+                    StampMtime(remoteMtimes, repoPath, local); // match the manifest so we don't re-upload it
                     down++;
-                    _log($"Downloaded saves/{folder}/{fname}");
+                    _log($"Downloaded {repoPath}");
                 }
             }
 
@@ -319,8 +378,11 @@ public sealed class GitHubSyncService
                 if (!Directory.Exists(Path.Combine(gameboxesDir, folder)))
                     continue; // game not installed here
                 var local = Path.Combine(gameboxesDir, folder, "content", rel.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(local))
-                    continue; // additive: don't clobber a local save with a possibly-older cloud copy
+                // Newest-wins: pull when missing locally, or when the shared manifest says the cloud
+                // copy is newer than ours. (Previously skip-if-exists, which let a machine play on a
+                // stale save and then clobber another machine's newer progress on the next upload.)
+                if (File.Exists(local) && !RemoteNewer(remoteMtimes, path, local))
+                    continue;
                 var bytes = await GetBlobAsync(token, login, repo, sha, ct).ConfigureAwait(false);
                 if (bytes is null)
                     continue;
@@ -332,9 +394,15 @@ public sealed class GitHubSyncService
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(local)!);
                 File.WriteAllBytes(local, bytes);
+                StampMtime(remoteMtimes, path, local); // match the manifest so we don't re-upload it
                 down++;
                 _log($"Downloaded {path}");
             }
+
+            // Persist the shared mtime manifest if our uploads advanced any timestamps, so other
+            // machines can tell which saves are newest on their next sync.
+            if (remoteManifestDirty)
+                await SaveRemoteManifestAsync(token, login, repo, remoteMtimes, ct).ConfigureAwait(false);
 
             _log($"Sync finished — {up} uploaded, {down} downloaded.");
             progress?.Report($"Done — {up} uploaded, {down} downloaded.");
@@ -465,6 +533,53 @@ public sealed class GitHubSyncService
         var content = doc.RootElement.GetProperty("content").GetString() ?? "";
         try { return Convert.FromBase64String(content.Replace("\n", "")); }
         catch { return null; }
+    }
+
+    // ── Shared mtime manifest (cross-machine newest-wins for mutable saves) ──────────────────
+    // The repo's plaintext manifest.json maps each mutable save's repoPath → its modified time
+    // (ISO-8601 UTC). GitHub doesn't expose blob mtimes, so this is the only cross-machine source
+    // of "which copy is newest". Never encrypted: it holds timestamps only, no save content.
+    private static async Task<Dictionary<string, string>> LoadRemoteManifestAsync(string token, string login, string repo, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await SendAsync(HttpMethod.Get, $"{Api}/repos/{login}/{repo}/contents/manifest.json", token, ct: ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+                return new(StringComparer.Ordinal);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            var b64 = doc.RootElement.GetProperty("content").GetString() ?? "";
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(b64.Replace("\n", "")));
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new(StringComparer.Ordinal);
+        }
+        catch
+        {
+            return new(StringComparer.Ordinal);
+        }
+    }
+
+    private static async Task SaveRemoteManifestAsync(string token, string login, string repo, Dictionary<string, string> mtimes, CancellationToken ct)
+    {
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(mtimes)); // plaintext — PutAsync resolves the existing sha
+        await PutAsync(token, login, repo, "manifest.json", bytes, ct).ConfigureAwait(false);
+    }
+
+    // True when the shared manifest records a strictly-newer mtime for this path than the local file.
+    // No record → false (don't clobber a local file we have no timestamp to compare against).
+    private static bool RemoteNewer(Dictionary<string, string> mtimes, string repoPath, string localFile)
+    {
+        if (!mtimes.TryGetValue(repoPath, out var rm)
+            || !DateTime.TryParse(rm, null, System.Globalization.DateTimeStyles.RoundtripKind, out var remoteMtime))
+            return false;
+        return remoteMtime > File.GetLastWriteTimeUtc(localFile);
+    }
+
+    // Stamp a just-downloaded file with the manifest's mtime so the next sync sees it as in-sync
+    // (rather than locally newer) and doesn't bounce it straight back up.
+    private static void StampMtime(Dictionary<string, string> mtimes, string repoPath, string localFile)
+    {
+        if (mtimes.TryGetValue(repoPath, out var rm)
+            && DateTime.TryParse(rm, null, System.Globalization.DateTimeStyles.RoundtripKind, out var m))
+            try { File.SetLastWriteTimeUtc(localFile, m); } catch { /* best effort */ }
     }
 
     private static async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string token, string? jsonBody = null, CancellationToken ct = default)

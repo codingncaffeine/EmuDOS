@@ -76,3 +76,7 @@ EmuDOS stands on the work of others, with thanks:
 - Box art / manuals come from **ScreenScraper**, **SteamGridDB**, and the **Internet Archive** via their APIs.
 
 > Rebuilding the bundled MT-32 synth DLL is covered in the [wiki](https://github.com/codingncaffeine/EmuDOS/wiki/How-It-Works#building-the-mt-32-shim-optional).
+
+## License
+
+[GNU General Public License v3.0](LICENSE)
