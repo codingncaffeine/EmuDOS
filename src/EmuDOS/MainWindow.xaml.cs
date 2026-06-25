@@ -1065,6 +1065,27 @@ public partial class MainWindow : Window
         }
 
         var instance = services.Store.Resolve(tile.Game.GameboxPath);
+
+        // One-time: a CD game whose whole install ended up in the writable overlay (.pure.zip) gets
+        // graduated to a folder layout, so tiny pilot/config saves write in place instead of rewriting
+        // the entire multi-hundred-MB overlay each time (the ~1s save hitch + cloud-sync bloat).
+        if (instance.Profile.SourceMedia == EmuDOS.Core.Model.SourceMediaType.Iso)
+        {
+            Vm.Report($"Optimizing {tile.Title} for faster saves…", busy: true);
+            var graduated = await Task.Run(() =>
+                PureSave.GraduateInstalledGame(tile.Game.GameboxPath, instance.Profile));
+            if (graduated is not null)
+            {
+                services.Store.WriteProfile(tile.Game.GameboxPath, graduated);
+                // Remember the install's program so it wins exe selection below (it's the pinned target).
+                if (!string.IsNullOrWhiteSpace(graduated.Launch.Executable))
+                    services.Store.WriteState(tile.Game.GameboxPath,
+                        services.Store.ReadState(tile.Game.GameboxPath).WithExecutable(graduated.Launch.Executable!));
+                instance = instance with { Profile = graduated };
+                Vm.Report($"Optimized {tile.Title} for faster saves.", busy: false);
+            }
+        }
+
         if (bootToDos)
         {
             // No game launch — just configure + drop to the C: prompt (content is mounted as C:)
