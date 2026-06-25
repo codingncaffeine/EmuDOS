@@ -162,17 +162,7 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
             // can't IMGMOUNT an image that's deeply nested or has a long/spaced name inside the
             // union-mounted C:. We then mount via the C: drive path with -t cdrom (the only type that
             // registers MSCDEX and reads raw MODE1/2352 cue/bin, keeping CD audio).
-            if (discMount is null && profile.SourceMedia != SourceMediaType.Iso
-                && !profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase))
-                && StageBundledDiscsAtRoot(box.ContentDir) is { Count: > 0 } rootDiscs)
-            {
-                // Mount every disc of the set on one D: drive so a multi-disc game can swap discs
-                // (dosbox_pure cycles them via its disc menu); a single-disc game is just one image.
-                var images = string.Join(" ", rootDiscs.Select(d => $"\"c:\\{d}\""));
-                var pre = new List<string> { $"IMGMOUNT D: {images} -t cdrom" };
-                pre.AddRange(profile.Launch.PreCommands);
-                profile = profile with { Launch = profile.Launch with { PreCommands = pre } };
-            }
+            profile = EnsureBundledDiscMounted(profile, box.ContentDir);
 
             store.WriteProfile(gameboxPath, profile);
 
@@ -440,6 +430,31 @@ public sealed class ImportPipeline(AppPaths paths, GameboxStore store, ProfileRe
     /// C:, so each disc — and, for a .cue, its referenced tracks — is copied to the root and the cue
     /// rewritten to the new names. Returns an empty list when there's nothing to stage.
     /// </summary>
+    /// <summary>
+    /// Ensure a folder/zip game with a bundled CD image mounts it as the D: CD-ROM. Folders (unlike the
+    /// Iso m3u8 path) don't auto-mount a disc inside, so we stage every disc of the set to the content
+    /// root under short, space-free names and IMGMOUNT them as one swappable D: drive (with -t cdrom, so
+    /// MSCDEX + CD audio work). No-op for Iso games (they mount via the m3u8) or when a D: mount is
+    /// already set. Shared by import, the post-install graduation, and launch so every game — existing
+    /// or freshly imported — gets the disc mounted the same way.
+    /// </summary>
+    public static GameProfile EnsureBundledDiscMounted(GameProfile profile, string contentDir)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (profile.SourceMedia == SourceMediaType.Iso)
+            return profile;
+        if (profile.Launch.PreCommands.Any(c => c.Contains("IMGMOUNT D:", StringComparison.OrdinalIgnoreCase)))
+            return profile;
+        if (StageBundledDiscsAtRoot(contentDir) is not { Count: > 0 } rootDiscs)
+            return profile;
+
+        // One D: drive holds the whole set so a multi-disc game can swap discs via dosbox_pure's menu.
+        var images = string.Join(" ", rootDiscs.Select(d => $"\"c:\\{d}\""));
+        var pre = new List<string> { $"IMGMOUNT D: {images} -t cdrom" };
+        pre.AddRange(profile.Launch.PreCommands);
+        return profile with { Launch = profile.Launch with { PreCommands = pre } };
+    }
+
     private static IReadOnlyList<string> StageBundledDiscsAtRoot(string contentDir)
     {
         var all = Directory.EnumerateFiles(contentDir, "*", SearchOption.AllDirectories)

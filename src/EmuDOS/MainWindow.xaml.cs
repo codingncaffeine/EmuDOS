@@ -1086,6 +1086,16 @@ public partial class MainWindow : Window
             }
         }
 
+        // Ensure a folder game's bundled CD mounts as D: — covers freshly-graduated disc games (their
+        // CD check / audio still needs the disc) and any folder game whose mount wasn't set up yet.
+        // Persist if it changed so it's a one-time cost, then it's a no-op next launch.
+        var withDisc = EmuDOS.Core.Import.ImportPipeline.EnsureBundledDiscMounted(instance.Profile, instance.ContentPath);
+        if (!ReferenceEquals(withDisc, instance.Profile))
+        {
+            services.Store.WriteProfile(tile.Game.GameboxPath, withDisc);
+            instance = instance with { Profile = withDisc };
+        }
+
         if (bootToDos)
         {
             // No game launch — just configure + drop to the C: prompt (content is mounted as C:)
