@@ -41,6 +41,12 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     private Core.Media.RecordingService? _recorder;
     private int _recWidth, _recHeight;
 
+    // FPS overlay (toggle key): counts delivered frames over ~1s; shows current vs the per-game lock.
+    private Key _fpsKey;
+    private bool _showFps;
+    private int _fpsCounter;
+    private DispatcherTimer? _fpsTimer;
+
     private readonly Key _screenshotKey;
     private readonly Key _recordKey;
     private readonly Key? _mouseLockKey;
@@ -114,6 +120,17 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _pauseKey = ParseKey(settings.PauseKey, Key.Pause);
         _rewindKey = ParseKey(settings.RewindKey, Key.F4);
         _shaderCycleKey = ParseKey(settings.ShaderCycleKey, Key.F3);
+        _fpsKey = ParseKey(settings.FpsOverlayKey, Key.F1);
+        _fpsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _fpsTimer.Tick += (_, _) =>
+        {
+            int frames = System.Threading.Interlocked.Exchange(ref _fpsCounter, 0);
+            if (!_showFps)
+                return;
+            int lockFps = _instance.Profile.Machine.FpsLock;
+            FpsOverlay.Text = lockFps > 0 ? $"FPS {frames} / {lockFps}" : $"FPS {frames}";
+        };
+        _fpsTimer.Start();
         // Per-game slang shader preset (relative path under the downloaded pack), "" = none. Set by the
         // shader-cycle key and saved per game. Old WPF-shader values (e.g. "Crt") just won't resolve.
         _desiredPreset = ((App)Application.Current).Services.Store.ReadState(_instance.GameboxPath).Shader ?? "";
@@ -193,6 +210,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         int w = frame.Width, h = frame.Height;
         if (w <= 0 || h <= 0)
             return;
+
+        System.Threading.Interlocked.Increment(ref _fpsCounter); // for the FPS overlay
 
         // Build the native frame into _nativeBuffer (emu thread only — no lock needed; this thread is
         // serial and is the sole writer/reader of _nativeBuffer).
@@ -536,6 +555,17 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         if (effective == _rewindKey)
         {
             _session.SetRewinding(true); // hold to rewind
+            e.Handled = true;
+            return;
+        }
+        if (effective == _fpsKey)
+        {
+            if (!e.IsRepeat)
+            {
+                _showFps = !_showFps;
+                FpsOverlay.Visibility = _showFps ? Visibility.Visible : Visibility.Collapsed;
+                if (_showFps) FpsOverlay.Text = "FPS …";
+            }
             e.Handled = true;
             return;
         }

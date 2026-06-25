@@ -20,5 +20,9 @@
                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,16,0"
                    Foreground="#FFE03535" FontSize="14" FontWeight="Bold"
                    Background="#A0000000" Padding="8,3"/>
+        <TextBlock x:Name="FpsOverlay" Visibility="Collapsed" IsHitTestVisible="False"
+                   HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,14,0,0"
+                   Foreground="#FF7CFC7C" FontFamily="Consolas" FontSize="14" FontWeight="Bold"
+                   Background="#A0000000" Padding="8,3"/>
     </Grid>
 </Window>

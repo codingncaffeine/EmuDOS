@@ -73,6 +73,9 @@ public sealed class UserSettings
     /// <summary>Cycle the in-game CRT video shader (Off / Scanlines / CRT).</summary>
     public string ShaderCycleKey { get; set; } = "F3";
 
+    /// <summary>In-game key that toggles the FPS overlay (current vs. locked frame rate).</summary>
+    public string FpsOverlayKey { get; set; } = "F1";
+
     /// <summary>The CRT video shader applied to games: "Off", "Scanlines", or "Crt".</summary>
     public string VideoShader { get; set; } = "Off";
 
