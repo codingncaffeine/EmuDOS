@@ -26,7 +26,7 @@ public static class ContentBaseline
         if (name.StartsWith("gamecd."))    // staged bundled-CD image
             return true;
         var ext = Path.GetExtension(name);
-        return ext is ".tmp";
+        return ext is ".tmp" or ".swp"; // scratch / DOS swap files — not saves, and regenerate constantly
     }
 
     public static bool Exists(string savesDir) => File.Exists(Path.Combine(savesDir, FileName));
