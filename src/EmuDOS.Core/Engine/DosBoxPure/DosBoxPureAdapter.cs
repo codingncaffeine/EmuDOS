@@ -78,6 +78,10 @@ public static class DosBoxPureAdapter
             o["dosbox_pure_svgamem"] = SvgaMemValue(profile.Machine.SvgaMemoryKb);
         }
 
+        // Per-game frame-rate lock → dosbox_pure's "Force Output FPS" (0 = leave at default).
+        if (profile.Machine.FpsLock > 0)
+            o["dosbox_pure_force60fps"] = profile.Machine.FpsLock.ToString(CultureInfo.InvariantCulture);
+
         // Disc images load as content with no autoexec, so force the core's start menu to stay open
         // (-1) — that's where "Boot and Install New Operating System" + the hard-disk size live.
         // Normal games auto-run via DOSBOX.BAT, so they keep the default (auto-start) behavior.

@@ -12,6 +12,15 @@ public enum BoxStyle
     ThreeD,
 }
 
+/// <summary>Per-game hardware-3dfx (OpenGL Voodoo) choice. <see cref="Default"/> follows the global
+/// <c>UserSettings.Hardware3dfx</c>; the others override it per game.</summary>
+public enum Hardware3dfxMode
+{
+    Default,
+    On,
+    Off,
+}
+
 /// <summary>What the user dropped in to create the gamebox.</summary>
 public enum SourceMediaType
 {

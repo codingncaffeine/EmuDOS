@@ -1103,9 +1103,15 @@ public partial class MainWindow : Window
         if (instance.Profile.SourceMedia != EmuDOS.Core.Model.SourceMediaType.Iso)
             EmuDOS.Core.Library.ContentBaseline.CaptureIfMissing(instance.ContentPath, instance.SavePath);
 
+        // 3dfx: the per-game choice overrides the global default (Default = follow global).
+        bool hw3dfx = instance.Profile.Machine.Hardware3dfx switch
+        {
+            EmuDOS.Core.Model.Hardware3dfxMode.On => true,
+            EmuDOS.Core.Model.Hardware3dfxMode.Off => false,
+            _ => services.Settings.Hardware3dfx,
+        };
         var engine = new DosBoxPureEngine(
-            services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir,
-            services.Settings.Hardware3dfx);
+            services.Downloads.InstalledPath(AssetManifest.DosBoxPure), services.Paths.SystemDir, hw3dfx);
         services.Library.RecordPlay(tile.Id);
 
         new EmulatorWindow(engine, instance, tile.Id, loadState) { Owner = this }.Show();

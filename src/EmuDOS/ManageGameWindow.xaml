@@ -160,25 +160,44 @@
                     </ScrollViewer>
                 </Grid>
             </TabItem>
-            <TabItem Header="Screenshots">
-                <Grid Margin="12,8">
-                    <ListBox x:Name="ShotsList" Background="Transparent" BorderThickness="0"
-                             ItemTemplate="{StaticResource RowWithOpen}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             HorizontalContentAlignment="Stretch"/>
-                    <TextBlock x:Name="ShotsEmpty" Style="{StaticResource EmptyHint}"
-                               Text="No screenshots yet — press F12 in-game to capture one." Visibility="Collapsed"/>
-                </Grid>
+            <TabItem Header="Media">
+                <TabControl Margin="6,6" Background="{StaticResource BgPrimary}" BorderThickness="0" Padding="4">
+                    <TabItem Header="Screenshots">
+                        <Grid Margin="8,8">
+                            <ListBox x:Name="ShotsList" Background="Transparent" BorderThickness="0"
+                                     ItemTemplate="{StaticResource RowWithOpen}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     HorizontalContentAlignment="Stretch"/>
+                            <TextBlock x:Name="ShotsEmpty" Style="{StaticResource EmptyHint}"
+                                       Text="No screenshots yet — press F12 in-game to capture one." Visibility="Collapsed"/>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="Videos">
+                        <Grid Margin="8,8">
+                            <ListBox x:Name="VideosList" Background="Transparent" BorderThickness="0"
+                                     ItemTemplate="{StaticResource RowWithOpen}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     HorizontalContentAlignment="Stretch"/>
+                            <TextBlock x:Name="VideosEmpty" Style="{StaticResource EmptyHint}"
+                                       Text="No recordings yet — press F9 in-game to record." Visibility="Collapsed"/>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
             </TabItem>
-            <TabItem Header="Videos">
-                <Grid Margin="12,8">
-                    <ListBox x:Name="VideosList" Background="Transparent" BorderThickness="0"
-                             ItemTemplate="{StaticResource RowWithOpen}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             HorizontalContentAlignment="Stretch"/>
-                    <TextBlock x:Name="VideosEmpty" Style="{StaticResource EmptyHint}"
-                               Text="No recordings yet — press F9 in-game to record." Visibility="Collapsed"/>
-                </Grid>
+            <TabItem Header="Display">
+                <StackPanel Margin="18,14">
+                    <TextBlock Text="Frame rate" Style="{StaticResource Heading}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,6"
+                               Text="Lock the output frame rate to remove tearing and steady the picture. This caps presentation only — for a game that runs too fast, lower the CPU cycles in Preferences."/>
+                    <ComboBox x:Name="FpsLockBox" Width="160" HorizontalAlignment="Left"
+                              Foreground="{StaticResource TextPrimary}" SelectionChanged="OnDisplaySettingChanged"/>
+
+                    <TextBlock Text="3dfx (Voodoo)" Style="{StaticResource Heading}" Margin="0,18,0,4"/>
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,6"
+                               Text="Hardware-OpenGL 3dfx rendering for this game. Default follows the global setting (Preferences → General)."/>
+                    <ComboBox x:Name="Hw3dfxBox" Width="160" HorizontalAlignment="Left"
+                              Foreground="{StaticResource TextPrimary}" SelectionChanged="OnDisplaySettingChanged"/>
+                </StackPanel>
             </TabItem>
             <TabItem Header="In-game saves">
                 <Grid Margin="12,8">

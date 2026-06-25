@@ -20,6 +20,9 @@ public partial class ManageGameWindow : Window
     private readonly Gamebox _box;
     private readonly AppServices _services;
     private readonly string _title;
+    private readonly string _gameboxPath;
+    private EmuDOS.Core.Model.GameProfile? _profile;
+    private bool _displayLoaded;
     private string _notesOnDisk = string.Empty;
 
     public ManageGameWindow(AppServices services, LibraryGame game)
@@ -27,15 +30,45 @@ public partial class ManageGameWindow : Window
         InitializeComponent();
         _services = services;
         _title = game.Title;
+        _gameboxPath = game.GameboxPath;
         _box = new Gamebox(game.GameboxPath);
         Title = $"Manage — {game.Title}";
         HeaderText.Text = game.Title;
 
         LoadMediaLists();
+        LoadDisplaySettings();
         LoadNotes();
 
         NotesBox.LostKeyboardFocus += (_, _) => SaveNotes();
         Closing += (_, _) => SaveNotes();
+    }
+
+    // ── Display tab (per-game frame-rate lock + 3dfx) ─────────────────────────────────────────
+    private static readonly string[] FpsOptions = ["Off", "30", "35", "50", "60", "70", "90", "120", "144"];
+
+    private void LoadDisplaySettings()
+    {
+        try { _profile = _services.Store.ReadProfile(_gameboxPath); }
+        catch { _profile = null; }
+
+        FpsLockBox.ItemsSource = FpsOptions;
+        Hw3dfxBox.ItemsSource = Enum.GetNames<EmuDOS.Core.Model.Hardware3dfxMode>();
+
+        var m = _profile?.Machine;
+        FpsLockBox.SelectedItem = m is { FpsLock: > 0 } ? m.FpsLock.ToString() : "Off";
+        Hw3dfxBox.SelectedItem = (m?.Hardware3dfx ?? EmuDOS.Core.Model.Hardware3dfxMode.Default).ToString();
+        _displayLoaded = true;
+    }
+
+    private void OnDisplaySettingChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (!_displayLoaded || _profile is null)
+            return;
+        int fps = int.TryParse(FpsLockBox.SelectedItem as string, out var v) ? v : 0;
+        var mode = Enum.TryParse<EmuDOS.Core.Model.Hardware3dfxMode>(Hw3dfxBox.SelectedItem as string, out var md)
+            ? md : EmuDOS.Core.Model.Hardware3dfxMode.Default;
+        _profile = _profile with { Machine = _profile.Machine with { FpsLock = fps, Hardware3dfx = mode } };
+        _services.Store.WriteProfile(_gameboxPath, _profile);
     }
 
     // ── Row model bound by the DataTemplates ──────────────────────────────────────────────

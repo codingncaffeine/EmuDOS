@@ -12,4 +12,12 @@ public sealed record MachineSpec
 
     /// <summary>Apply 4:3 aspect-ratio correction on output.</summary>
     public bool AspectCorrection { get; init; }
+
+    /// <summary>Lock the output frame rate to this FPS (0 = off). Drives dosbox_pure's "Force Output
+    /// FPS" — steadies the frame rate and removes tearing. Note: caps presentation, not the emulated
+    /// CPU speed (use cycles for games that run too fast).</summary>
+    public int FpsLock { get; init; }
+
+    /// <summary>Per-game hardware-3dfx choice (Default follows the global setting).</summary>
+    public Hardware3dfxMode Hardware3dfx { get; init; } = Hardware3dfxMode.Default;
 }
