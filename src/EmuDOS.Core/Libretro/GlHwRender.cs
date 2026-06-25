@@ -36,6 +36,9 @@ internal sealed class GlHwRender : IDisposable
     private IntPtr _readback;       // persistent BGRA buffer (top-down, alpha forced 0xFF)
     private int _readbackBytes;
     private bool _fbLogged, _frameLogged;
+    private readonly System.Diagnostics.Stopwatch _rbSw = new();
+    private double _rbSumMs, _rbMaxMs;
+    private int _rbFrames;
 
     public bool Active { get; private set; }
     public IntPtr FramePtr => _readback;
@@ -116,6 +119,7 @@ internal sealed class GlHwRender : IDisposable
         }
 
         int stride = width * 4;
+        _rbSw.Restart(); // time the readback to tell our pipeline cost apart from a core/game stutter
         IntPtr tmp = Marshal.AllocHGlobal(bytes);
         try
         {
@@ -135,6 +139,15 @@ internal sealed class GlHwRender : IDisposable
             }
         }
         finally { Marshal.FreeHGlobal(tmp); }
+
+        double ms = _rbSw.Elapsed.TotalMilliseconds;
+        _rbSumMs += ms;
+        if (ms > _rbMaxMs) _rbMaxMs = ms;
+        if (++_rbFrames >= 300)
+        {
+            Log($"readback avg {_rbSumMs / _rbFrames:0.00} ms, max {_rbMaxMs:0.00} ms over {_rbFrames} frames ({width}x{height})");
+            _rbSumMs = 0; _rbMaxMs = 0; _rbFrames = 0;
+        }
 
         if (!_frameLogged)
         {
