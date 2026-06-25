@@ -44,7 +44,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
     // FPS overlay (toggle key): counts delivered frames over ~1s; shows current vs the per-game lock.
     private Key _fpsKey;
     private bool _showFps = true; // on by default; the FPS key toggles it
-    private int _fpsCounter;
+    private long _lastFramesPresented;
     private DispatcherTimer? _fpsTimer;
 
     private readonly Key _screenshotKey;
@@ -124,7 +124,9 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         _fpsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _fpsTimer.Tick += (_, _) =>
         {
-            int frames = System.Threading.Interlocked.Exchange(ref _fpsCounter, 0);
+            long now = _session?.FramesPresented ?? _lastFramesPresented;
+            long frames = now - _lastFramesPresented; // presented frames over the last ~1s = output FPS
+            _lastFramesPresented = now;
             if (!_showFps)
                 return;
             int lockFps = _instance.Profile.Machine.FpsLock;
@@ -212,8 +214,6 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
         int w = frame.Width, h = frame.Height;
         if (w <= 0 || h <= 0)
             return;
-
-        System.Threading.Interlocked.Increment(ref _fpsCounter); // for the FPS overlay
 
         // Build the native frame into _nativeBuffer (emu thread only — no lock needed; this thread is
         // serial and is the sole writer/reader of _nativeBuffer).

@@ -531,8 +531,13 @@ public sealed class LibretroCore : IDisposable
         return false;
     }
 
+    /// <summary>Total presented frames (incl. duplicates) — every video_refresh call. Divided over
+    /// wall-clock this is the true OUTPUT frame rate, which reflects a "force output FPS" lock.</summary>
+    public long FrameCount { get; private set; }
+
     private void OnVideoRefresh(nint data, uint width, uint height, nuint pitch)
     {
+        FrameCount++; // a NULL data call is a duplicate — still a presented frame for the output rate
         if (data == 0)
             return; // duplicated frame
         if (data == LibretroConstants.HwFrameBufferValid && _hw is not null)

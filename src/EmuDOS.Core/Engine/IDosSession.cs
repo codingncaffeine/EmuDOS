@@ -44,6 +44,9 @@ public interface IDosSession : IDisposable
     /// <summary>The MT-32 LCD text when our synth is driving MIDI; null when it isn't active.</summary>
     string? Mt32Lcd => null;
 
+    /// <summary>Total presented frames so far (incl. duplicates) — over wall-clock, the output FPS.</summary>
+    long FramesPresented => 0;
+
     // ── Cheat engine: live memory access (marshalled onto the emulation thread by the implementation). ──
 
     /// <summary>Memory regions the core exposed (guest address + length), or empty if none/unsupported.</summary>

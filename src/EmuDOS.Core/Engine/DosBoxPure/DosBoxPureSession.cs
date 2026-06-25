@@ -57,6 +57,8 @@ public sealed class DosBoxPureSession : IDosSession
 
     public EngineState State => _state;
 
+    public long FramesPresented => _core?.FrameCount ?? 0;
+
     /// <summary>Details of the exception that faulted the session, if any (for diagnostics).</summary>
     public string? LastError { get; private set; }
 
@@ -256,6 +258,9 @@ public sealed class DosBoxPureSession : IDosSession
             }
 
             var avInfo = _core.GetAvInfo();
+            int fpsLock = _instance.Profile.Machine.FpsLock;
+            _host.OnCoreLog(1, $"[fps] frame-rate lock {(fpsLock > 0 ? fpsLock + " requested" : "off")}; "
+                + $"core reports {avInfo.Fps:0.##} fps");
             if (_core.HwActive)
                 _core.HwPrepareAndReset(avInfo.MaxWidth > 0 ? avInfo.MaxWidth : 1024,
                                         avInfo.MaxHeight > 0 ? avInfo.MaxHeight : 768);
@@ -291,6 +296,12 @@ public sealed class DosBoxPureSession : IDosSession
         var sw = Stopwatch.StartNew();
         long frame = 0;
         double targetMs = 0; // accumulated target wall-clock; advances by the speed-scaled frame time
+
+        // Measured output-FPS logging (confirms a frame-rate lock is actually in effect).
+        var fpsClock = Stopwatch.StartNew();
+        long lastFpsFrame = _core!.FrameCount;
+        int fpsLockForLog = _instance.Profile.Machine.FpsLock;
+
         while (_running)
         {
             DrainPending();
@@ -347,6 +358,15 @@ public sealed class DosBoxPureSession : IDosSession
                 sw.Restart();
                 frame = 0;
                 targetMs = 0;
+            }
+
+            if (fpsClock.ElapsedMilliseconds >= 5000)
+            {
+                long now = _core!.FrameCount;
+                double measured = (now - lastFpsFrame) * 1000.0 / fpsClock.Elapsed.TotalMilliseconds;
+                _host.OnCoreLog(1, $"[fps] output {measured:0.#} fps{(fpsLockForLog > 0 ? $" (lock {fpsLockForLog})" : "")}");
+                lastFpsFrame = now;
+                fpsClock.Restart();
             }
         }
 
