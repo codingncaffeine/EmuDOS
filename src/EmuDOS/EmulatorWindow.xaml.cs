@@ -43,7 +43,7 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
 
     // FPS overlay (toggle key): counts delivered frames over ~1s; shows current vs the per-game lock.
     private Key _fpsKey;
-    private bool _showFps;
+    private bool _showFps = true; // on by default; the FPS key toggles it
     private int _fpsCounter;
     private DispatcherTimer? _fpsTimer;
 
@@ -131,6 +131,8 @@ public partial class EmulatorWindow : Window, IEngineHost, IInputSource
             FpsOverlay.Text = lockFps > 0 ? $"FPS {frames} / {lockFps}" : $"FPS {frames}";
         };
         _fpsTimer.Start();
+        FpsOverlay.Visibility = Visibility.Visible; // shown by default
+        FpsOverlay.Text = "FPS …";
         // Per-game slang shader preset (relative path under the downloaded pack), "" = none. Set by the
         // shader-cycle key and saved per game. Old WPF-shader values (e.g. "Crt") just won't resolve.
         _desiredPreset = ((App)Application.Current).Services.Store.ReadState(_instance.GameboxPath).Shader ?? "";
