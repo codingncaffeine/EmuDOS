@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmuDOS — A DOS game library for Windows &amp; Linux</title>
+    <meta name="description" content="EmuDOS is a Boxer-style DOS gaming frontend for Windows and Linux. Drop a game in and it appears as box art on a shelf — the right speed, sound, and program figured out for you.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── DOS / VGA 16-colour palette ───────────────────────── */
+        :root {
+            --black:    #0b0b0b;
+            --screen:   #0d0e0a;
+            --blue:     #0000a8;   /* NC panel blue   */
+            --dblue:    #00007a;
+            --cyan:     #36c6c6;
+            --bcyan:    #67ffff;
+            --green:    #2fd44f;
+            --red:      #ff5151;
+            --magenta:  #b657c6;
+            --amber:    #e8a33d;   /* phosphor accent */
+            --bamber:   #ffc869;
+            --gray:     #a9a08c;
+            --dgray:    #555047;
+            --white:    #ece6d8;
+            --bwhite:   #ffffff;
+        }
+
+        html { background: #000; }
+
+        body {
+            font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            background:
+                radial-gradient(120% 90% at 50% 0%, #14150f 0%, var(--screen) 45%, #050604 100%);
+            color: var(--white);
+            line-height: 1.55;
+            font-size: 15px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Blocky display face for headings / signage */
+        .vt { font-family: 'VT323', 'IBM Plex Mono', monospace; line-height: 1; }
+
+        a { color: var(--bcyan); text-decoration: none; }
+        a:hover { color: var(--bwhite); }
+
+        /* ── CRT overlay: scanlines + flicker + vignette ───────── */
+        .crt::before {
+            content: "";
+            position: fixed; inset: 0; z-index: 9000;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    rgba(0,0,0,0)    0px,
+                    rgba(0,0,0,0)    2px,
+                    rgba(0,0,0,0.28) 3px,
+                    rgba(0,0,0,0.28) 3px);
+            mix-blend-mode: multiply;
+        }
+        .crt::after {
+            content: "";
+            position: fixed; inset: 0; z-index: 9001;
+            pointer-events: none;
+            background: radial-gradient(120% 120% at 50% 50%, transparent 62%, rgba(0,0,0,0.55) 100%);
+            animation: flicker 7s infinite steps(60);
+        }
+        @keyframes flicker {
+            0%,100% { opacity: 1; }
+            48% { opacity: 0.97; }
+            49% { opacity: 0.92; }
+            50% { opacity: 0.99; }
+            73% { opacity: 0.95; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .crt::after { animation: none; }
+        }
+
+        .glow { text-shadow: 0 0 6px rgba(232,163,61,0.45); }
+
+        /* ── Top menu bar (DOS app menu, not a SaaS nav) ───────── */
+        .menubar {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; align-items: stretch;
+            background: var(--gray);
+            color: #1a1206;
+            font-size: 0.82rem;
+            border-bottom: 2px solid #000;
+            box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+        }
+        .menubar .title {
+            background: #1a1206; color: var(--bamber);
+            font-weight: 700; padding: 6px 14px;
+            display: flex; align-items: center; gap: 8px;
+            letter-spacing: 1px;
+        }
+        .menubar .title img { width: 18px; height: 18px; image-rendering: pixelated; }
+        .menubar nav { display: flex; flex-wrap: wrap; }
+        .menubar nav a {
+            color: #1a1206; padding: 6px 14px;
+            display: flex; align-items: center;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        .menubar nav a b { color: var(--red); margin-right: 1px; }   /* hotkey letter */
+        .menubar nav a:hover { background: #1a1206; color: var(--bamber); }
+        .menubar nav a:hover b { color: var(--bamber); }
+        .menubar .clock {
+            margin-left: auto; padding: 6px 14px;
+            background: #1a1206; color: var(--green);
+            display: flex; align-items: center; font-variant-numeric: tabular-nums;
+        }
+        @media (max-width: 680px) {
+            .menubar .clock { display: none; }
+            .menubar nav a { padding: 6px 10px; }
+        }
+
+        .wrap { max-width: 1000px; margin: 0 auto; padding: 0 18px; }
+
+        /* ── Hero: live AUTOFIX terminal ───────────────────────── */
+        .term-frame {
+            margin-top: 30px;
+            border: 2px solid var(--dgray);
+            background: #000;
+            box-shadow: inset 0 0 70px rgba(232,163,61,0.05), 0 18px 50px rgba(0,0,0,0.6);
+        }
+        .term-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--gray); color: #1a1206;
+            font-size: 0.74rem; letter-spacing: 1px; font-weight: 700;
+            padding: 3px 10px;
+        }
+        .term-bar .left { display: flex; align-items: center; gap: 6px; }
+        .term-bar .live { display: flex; align-items: center; gap: 6px; }
+        .term-bar .dot {
+            width: 8px; height: 8px; background: #b01010; border-radius: 50%;
+            box-shadow: 0 0 6px #ff3b3b; animation: blink 1.1s steps(1) infinite;
+        }
+        .term {
+            height: 300px; overflow: hidden;
+            padding: 12px 14px;
+            font-size: 0.9rem; line-height: 1.5;
+            color: var(--gray);
+            display: flex; flex-direction: column; justify-content: flex-end;
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px);
+                    mask-image: linear-gradient(to bottom, transparent 0, #000 40px);
+        }
+        .term .l    { flex: none; white-space: pre-wrap; word-break: break-word; }
+        .term .ps   { color: var(--green); }
+        .term .path { color: var(--bcyan); }
+        .term .ok   { color: var(--green); }
+        .term .num  { color: var(--bcyan); }
+        .term .warn { color: var(--amber); }
+        .term .fix  { color: var(--bamber); }
+        .term .run  { color: var(--green); text-shadow: 0 0 8px rgba(47,212,79,0.5); }
+        .term .dim  { color: var(--dgray); }
+        .term .cmd  { color: var(--white); }
+        .term .err  { color: var(--red); }
+        @media (max-width: 620px) { .term { height: 240px; font-size: 0.82rem; } }
+
+        .prompt { color: var(--white); }
+        .prompt .ps { color: var(--green); }
+        .cursor {
+            display: inline-block; width: 0.6em; height: 1.05em;
+            background: var(--amber); vertical-align: -2px;
+            animation: blink 1.05s steps(1) infinite;
+            box-shadow: 0 0 8px rgba(232,163,61,0.7);
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        @media (prefers-reduced-motion: reduce) {
+            .boot .line { opacity: 1; animation: none; }
+            .cursor { animation: none; }
+        }
+
+        /* Logo + tagline block that "paints in" after boot */
+        .hero-id {
+            margin: 26px 0 8px;
+            display: flex; align-items: center; gap: 26px;
+            flex-wrap: wrap;
+        }
+        .hero-id img {
+            width: 132px; height: auto;
+            filter: drop-shadow(0 0 22px rgba(232,163,61,0.35));
+        }
+        .hero-id h1 {
+            font-family: 'VT323', monospace;
+            font-size: 3.4rem; line-height: 0.92;
+            color: var(--bamber);
+            font-weight: 400; letter-spacing: 1px;
+            text-shadow: 0 0 14px rgba(232,163,61,0.4);
+        }
+        .hero-id .tag {
+            color: var(--gray); font-size: 0.98rem; margin-top: 8px;
+            max-width: 30ch;
+        }
+        .hero-sub {
+            color: var(--white); max-width: 64ch;
+            margin: 4px 0 22px; font-size: 0.95rem;
+        }
+        .hero-sub b { color: var(--bamber); font-weight: 700; }
+
+        /* DOS push-buttons */
+        .btns { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+        .dosbtn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 700; font-size: 0.9rem;
+            padding: 9px 20px;
+            color: var(--bamber); background: #1a1206;
+            border: 2px solid var(--amber);
+            box-shadow: 4px 4px 0 rgba(232,163,61,0.25);
+            text-transform: uppercase; letter-spacing: 1px;
+            transition: transform .05s, background .12s, color .12s, box-shadow .05s;
+        }
+        .dosbtn:hover { background: var(--amber); color: #1a1206; box-shadow: 4px 4px 0 rgba(0,0,0,0.5); }
+        .dosbtn:active { transform: translate(4px,4px); box-shadow: 0 0 0 rgba(0,0,0,0); }
+        .dosbtn.alt { color: var(--bcyan); border-color: var(--cyan); box-shadow: 4px 4px 0 rgba(54,198,198,0.2); }
+        .dosbtn.alt:hover { background: var(--cyan); color: #06201f; }
+        .fineprint { color: var(--dgray); font-size: 0.8rem; margin-top: 14px; }
+        .fineprint b { color: var(--gray); font-weight: 400; }
+
+        /* ── Section heading bar ───────────────────────────────── */
+        .secbar {
+            margin: 64px 0 22px;
+            display: flex; align-items: center; gap: 14px;
+        }
+        .secbar .vt { font-size: 2rem; color: var(--bamber); }
+        .secbar .rule {
+            flex: 1; height: 0;
+            border-top: 2px solid var(--dgray);
+        }
+        .secbar .tag {
+            color: var(--cyan); font-size: 0.78rem; letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* ── The shelf payoff (full colour, the one "modern" bit) ─ */
+        .shelf {
+            border: 2px solid var(--dgray);
+            background: #000;
+            padding: 10px;
+            box-shadow: 0 0 0 1px #000, 0 24px 60px rgba(0,0,0,0.6);
+        }
+        .shelf img { display: block; width: 100%; }
+        .shelf .cap {
+            margin-top: 10px; padding: 8px 10px 4px;
+            color: var(--gray); font-size: 0.82rem;
+            border-top: 1px dashed var(--dgray);
+        }
+        .shelf .cap b { color: var(--bamber); }
+
+        /* ── Norton-Commander feature browser ──────────────────── */
+        .nc {
+            background: var(--blue);
+            color: var(--bcyan);
+            border: 2px solid #000;
+            box-shadow: 0 0 0 2px var(--dblue), 0 18px 50px rgba(0,0,0,0.6);
+            font-size: 0.9rem;
+        }
+        .nc-head {
+            text-align: center; color: var(--bwhite);
+            padding: 4px; letter-spacing: 2px;
+            border-bottom: 1px solid var(--dblue);
+            font-weight: 700;
+        }
+        .nc-body { display: grid; grid-template-columns: 280px 1fr; }
+        .nc-left { border-right: 2px solid #000; padding: 6px 0; }
+        .nc-left .col-h {
+            color: var(--bamber); padding: 2px 12px 6px;
+            border-bottom: 1px solid var(--dblue); margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+        .nc-file {
+            display: flex; justify-content: space-between; gap: 12px;
+            padding: 2px 12px; cursor: pointer;
+            color: var(--bcyan); white-space: nowrap;
+        }
+        .nc-file .sz { color: var(--cyan); opacity: 0.7; }
+        .nc-file:hover { color: var(--bwhite); }
+        .nc-file.sel { background: var(--cyan); color: #04201f; }
+        .nc-file.sel .sz { color: #04201f; opacity: 0.85; }
+        .nc-file.sel::before { content: "\25B8 "; }
+        .nc-file:not(.sel)::before { content: "\00A0\00A0"; }
+
+        .nc-right { padding: 16px 22px; color: var(--white); min-height: 320px; }
+        .nc-right h3 {
+            font-family: 'VT323', monospace; font-size: 1.9rem;
+            color: var(--bamber); font-weight: 400; line-height: 1;
+            margin-bottom: 4px;
+        }
+        .nc-right .meta { color: var(--cyan); font-size: 0.76rem; letter-spacing: 1px; margin-bottom: 14px; text-transform: uppercase; }
+        .nc-right p { color: var(--white); font-size: 0.92rem; }
+        .nc-right p code, .nc-right p strong { color: var(--bamber); font-weight: 700; }
+        .nc-right p code { font-style: normal; }
+
+        .nc-fkeys {
+            display: flex; flex-wrap: wrap; gap: 0;
+            background: var(--dblue); border-top: 2px solid #000;
+            font-size: 0.78rem;
+        }
+        .nc-fkeys span { display: flex; align-items: center; padding: 3px 10px; color: var(--white); }
+        .nc-fkeys span b { color: var(--bamber); margin-right: 4px; }
+        @media (max-width: 720px) {
+            .nc-body { grid-template-columns: 1fr; }
+            .nc-left { border-right: none; border-bottom: 2px solid #000; max-height: 210px; overflow-y: auto; }
+            .nc-right { min-height: 0; }
+        }
+
+        /* ── MT-32: a "device detected" dialog over the photo ──── */
+        .mt {
+            display: grid; grid-template-columns: 1fr 360px;
+            gap: 0; align-items: stretch;
+            border: 2px solid var(--dgray);
+        }
+        .mt .photo { background:#000; }
+        .mt .photo img { display:block; width:100%; height:100%; object-fit:cover; }
+        .mt .panel {
+            background: var(--blue); color: var(--white);
+            padding: 22px 22px; border-left: 2px solid #000;
+            display: flex; flex-direction: column; justify-content: center;
+        }
+        .mt .panel .badge {
+            align-self: flex-start;
+            background: var(--green); color: #03220c; font-weight: 700;
+            font-size: 0.72rem; letter-spacing: 1px; padding: 2px 8px; margin-bottom: 14px;
+        }
+        .mt .panel h3 { font-family:'VT323',monospace; font-size: 2rem; color: var(--bamber); font-weight:400; line-height:1; margin-bottom: 10px; }
+        .mt .panel p { font-size: 0.9rem; color: var(--white); }
+        .mt .panel p b { color: var(--bcyan); }
+        @media (max-width: 740px) {
+            .mt { grid-template-columns: 1fr; }
+            .mt .panel { border-left: none; border-top: 2px solid #000; }
+        }
+
+        /* ── SETUP wizard (getting started) ────────────────────── */
+        .setup {
+            border: 2px solid var(--dgray);
+            background: rgba(0,0,0,0.35);
+        }
+        .setup .bar {
+            background: var(--gray); color: #1a1206; font-weight: 700;
+            padding: 4px 12px; letter-spacing: 1px; font-size: 0.82rem;
+            display: flex; justify-content: space-between;
+        }
+        .setup .rows { padding: 8px 0; }
+        .setup .row {
+            display: grid; grid-template-columns: 30px 150px 1fr;
+            gap: 14px; align-items: baseline;
+            padding: 10px 18px;
+        }
+        .setup .row + .row { border-top: 1px dashed var(--dgray); }
+        .setup .n { color: var(--bamber); font-family:'VT323',monospace; font-size: 1.5rem; }
+        .setup .k { color: var(--bcyan); font-weight: 700; }
+        .setup .v { color: var(--gray); font-size: 0.9rem; }
+        .setup .v code { color: var(--bamber); }
+        .setup .progress { padding: 8px 18px 12px; color: var(--green); font-size: 0.85rem; }
+        @media (max-width: 620px) {
+            .setup .row { grid-template-columns: 24px 1fr; }
+            .setup .k { grid-column: 2; }
+            .setup .v { grid-column: 1 / -1; }
+        }
+
+        /* ── README notice box ─────────────────────────────────── */
+        .readme {
+            margin-top: 30px;
+            border: 2px solid var(--amber);
+            background: rgba(232,163,61,0.06);
+            padding: 16px 20px;
+            font-size: 0.86rem; color: var(--gray);
+        }
+        .readme .h { color: var(--bamber); font-weight: 700; margin-bottom: 6px; letter-spacing: 1px; }
+        .readme a { color: var(--bamber); }
+
+        /* ── Footer prompt ─────────────────────────────────────── */
+        footer {
+            margin-top: 70px; padding: 30px 0 60px;
+            border-top: 2px solid var(--dgray);
+            color: var(--gray); font-size: 0.88rem;
+        }
+        footer .fp { color: var(--green); }
+        footer .cmd { color: var(--white); }
+        footer .links { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+        footer .links a { color: var(--bcyan); }
+        footer .sig { margin-top: 18px; color: var(--dgray); font-size: 0.8rem; }
+        footer .sig a { color: var(--gray); }
+
+        /* ── CRT toggle (bottom-right) ─────────────────────────── */
+        .crt-toggle {
+            position: fixed; right: 14px; bottom: 14px; z-index: 9100;
+            background: #1a1206; color: var(--green);
+            border: 1px solid var(--dgray);
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem;
+            padding: 5px 9px; cursor: pointer; letter-spacing: 1px;
+        }
+        .crt-toggle:hover { color: var(--bamber); border-color: var(--amber); }
+
+        ::selection { background: var(--amber); color: #1a1206; }
+    </style>
+</head>
+<body class="crt">
+
+    <!-- DOS application menu bar -->
+    <div class="menubar">
+        <span class="title"><img src="emudos-logo.webp" alt="">EMUDOS</span>
+        <nav>
+            <a href="#features"><b>F</b>eatures</a>
+            <a href="#setup"><b>S</b>etup</a>
+            <a href="https://github.com/codingncaffeine/EmuDOS/wiki"><b>M</b>anual</a>
+            <a href="https://github.com/codingncaffeine/EmuDOS"><b>G</b>itHub</a>
+            <a href="#download"><b>D</b>ownload</a>
+        </nav>
+        <span class="clock" id="clock">--:--:--</span>
+    </div>
+
+    <div class="wrap">
+
+        <!-- ── Live AUTOFIX terminal ── -->
+        <div class="term-frame">
+            <div class="term-bar">
+                <span class="left">C:\EMUDOS&gt; autofix /all /loop</span>
+                <span class="live"><span class="dot" aria-hidden="true"></span>LIVE</span>
+            </div>
+            <div class="term" id="term" role="log" aria-label="EmuDOS live auto-configuration log"></div>
+        </div>
+
+        <div class="hero-id">
+            <img src="emudos-logo.webp" alt="EmuDOS logo">
+            <div>
+                <h1 class="vt glow">EmuDOS</h1>
+                <div class="tag">A beautiful DOS game library for Windows &amp; Linux.</div>
+            </div>
+        </div>
+
+        <p class="hero-sub">Drop a game onto a wooden shelf and it just plays — the right CPU speed, the right sound card, the right program to launch, all figured out for you. No <code>.conf</code>, no cycles to tune, no setup.</p>
+
+        <div class="btns" id="download">
+            <a href="https://github.com/codingncaffeine/EmuDOS/releases" class="dosbtn">▼ Download for Windows</a>
+            <a href="https://github.com/codingncaffeine/EmuDOS-For-Linux/releases" class="dosbtn">▼ Download for Linux</a>
+            <a href="https://github.com/codingncaffeine/EmuDOS" class="dosbtn alt">&lt;/&gt; Source</a>
+        </div>
+        <p class="fineprint"><b>Free &amp; open source · Windows 10/11 · Linux (.deb / tar.gz) · powered by the DOSBox&nbsp;Pure core</b></p>
+
+        <!-- ── The shelf (the colour payoff) ── -->
+        <div class="secbar">
+            <span class="vt">The Shelf</span>
+            <span class="rule"></span>
+            <span class="tag">DIR C:\GAMES</span>
+        </div>
+        <div class="shelf">
+            <img src="shelf.webp" alt="EmuDOS bookshelf library — DOS games shown as 3D box art on wooden shelves">
+            <div class="cap">Every game becomes a box on the shelf — <b>box art lands automatically</b>, hover to lift, click to play.</div>
+        </div>
+
+        <!-- ── Features as a file browser ── -->
+        <div class="secbar" id="features">
+            <span class="vt">Features</span>
+            <span class="rule"></span>
+            <span class="tag">DIR C:\EMUDOS\FEATURES</span>
+        </div>
+
+        <div class="nc">
+            <div class="nc-head">▌ EMUDOS — FEATURE COMMANDER ▐</div>
+            <div class="nc-body">
+                <div class="nc-left" id="ncList" role="listbox" aria-label="Feature list" tabindex="0">
+                    <div class="col-h">Name             Size</div>
+                    <!-- files injected by JS -->
+                </div>
+                <div class="nc-right" id="ncDetail" aria-live="polite">
+                    <!-- detail injected by JS -->
+                </div>
+            </div>
+            <div class="nc-fkeys">
+                <span><b>↑↓</b>Browse</span>
+                <span><b>F1</b>Help</span>
+                <span><b>F3</b>View</span>
+                <span><b>F9</b>Menu</span>
+                <span><b>F10</b>Quit</span>
+            </div>
+        </div>
+
+        <!-- ── MT-32 device dialog ── -->
+        <div class="secbar">
+            <span class="vt">Sound</span>
+            <span class="rule"></span>
+            <span class="tag">IRQ 5 · DMA 1</span>
+        </div>
+        <div class="mt">
+            <div class="photo">
+                <img src="mt32.webp" alt="A DOS adventure running in EmuDOS with the emulated Roland MT-32 LCD scrolling in the corner">
+            </div>
+            <div class="panel">
+                <span class="badge">DEVICE DETECTED</span>
+                <h3>Roland MT-32</h3>
+                <p>Some of the best DOS soundtracks were written for the Roland MT-32. Drop in your MT-32 or CM-32L ROMs and those games play with <b>real MT-32 music</b> — complete with the module's iconic dot-matrix LCD scrolling its messages on screen as you play. Sound Blaster, AdLib and General MIDI are all covered too.</p>
+            </div>
+        </div>
+
+        <!-- ── Setup wizard ── -->
+        <div class="secbar" id="setup">
+            <span class="vt">Setup</span>
+            <span class="rule"></span>
+            <span class="tag">INSTALL.EXE</span>
+        </div>
+        <div class="setup">
+            <div class="bar"><span>EMUDOS SETUP — 4 STEPS</span><span>[ESC] Cancel</span></div>
+            <div class="rows">
+                <div class="row"><span class="n">1</span><span class="k">Download</span><span class="v">Grab the latest release from GitHub — on Windows just run <code>EmuDOS.exe</code>, self-contained, no install; on Linux install the <code>.deb</code> or extract the <code>tar.gz</code>.</span></div>
+                <div class="row"><span class="n">2</span><span class="k">Get the Core</span><span class="v">On first launch, Preferences&nbsp;→&nbsp;Downloads fetches the DOSBox&nbsp;Pure core for you.</span></div>
+                <div class="row"><span class="n">3</span><span class="k">Add Games</span><span class="v">Drag a game folder, <code>.zip</code> or disc image onto the window. It lands on the shelf with art.</span></div>
+                <div class="row"><span class="n">4</span><span class="k">Play</span><span class="v">Click a box. The right speed and sound are already set — right-click any box for options.</span></div>
+            </div>
+            <div class="progress">[████████████████████████████] 100%  &nbsp;Ready to play.</div>
+        </div>
+
+        <div class="readme">
+            <div class="h">⚠ README.TXT — early &amp; in active development</div>
+            <p>EmuDOS is young software, built and tested by a small group. It plays a lot of games well today, but expect rough edges as it grows. The Linux port is newer and may trail the Windows app on a few features — see its <a href="https://github.com/codingncaffeine/EmuDOS-For-Linux">GitHub page</a> for current status. Bug reports and ideas are welcome on <a href="https://github.com/codingncaffeine/EmuDOS">GitHub</a>. EmuDOS downloads the DOSBox&nbsp;Pure core at runtime and never distributes copyrighted game files, BIOS or MT-32 ROMs — you supply your own.</p>
+        </div>
+
+    </div>
+
+    <footer>
+        <div class="wrap">
+            <div><span class="fp">C:\EMUDOS&gt;</span> <span class="cmd">help</span></div>
+            <div class="links">
+                <a href="https://github.com/codingncaffeine/EmuDOS">github</a>
+                <a href="https://github.com/codingncaffeine/EmuDOS/releases">releases</a>
+                <a href="https://github.com/codingncaffeine/EmuDOS-For-Linux">linux port</a>
+                <a href="https://github.com/codingncaffeine/EmuDOS/wiki">wiki</a>
+            </div>
+            <div class="sig">Inspired by Boxer · built on DOSBox&nbsp;Pure · a companion project to <a href="https://github.com/codingncaffeine/Emutastic">Emutastic</a>.</div>
+        </div>
+    </footer>
+
+    <button class="crt-toggle" id="crtToggle" type="button" title="Toggle CRT effect">CRT: ON</button>
+
+    <script>
+        // ── Live clock in the menu bar ──
+        (function () {
+            var el = document.getElementById('clock');
+            function tick() {
+                var d = new Date();
+                function p(n){ return (n<10?'0':'')+n; }
+                el.textContent = p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+            }
+            tick(); setInterval(tick, 1000);
+        })();
+
+        // ── Live AUTOFIX terminal: types DOS game-fixing log forever ──
+        (function () {
+            var term = document.getElementById('term');
+            if (!term) return;
+
+            var GAMES = [
+                "Doom","Doom II","Final Doom","Wolfenstein 3D","Spear of Destiny","Commander Keen",
+                "Duke Nukem 3D","Duke Nukem II","Rise of the Triad","Heretic","Hexen","Blood",
+                "Shadow Warrior","Redneck Rampage","Quake","Descent","Descent II","Terminal Velocity",
+                "System Shock","Ultima Underworld","Ultima VII","Ultima VIII","King's Quest V","King's Quest VI",
+                "Space Quest IV","Police Quest","Leisure Suit Larry","Quest for Glory","Gabriel Knight",
+                "The Secret of Monkey Island","Monkey Island 2","Day of the Tentacle","Sam and Max Hit the Road",
+                "Full Throttle","The Dig","Indiana Jones: Fate of Atlantis","Loom","Maniac Mansion","Zak McKracken",
+                "Myst","The 7th Guest","The 11th Hour","Lemmings","Oh No More Lemmings","SimCity","SimCity 2000",
+                "SimAnt","Civilization","Master of Orion","Master of Magic","X-COM: UFO Defense","X-COM: TFTD",
+                "Syndicate","Dune II","Command & Conquer","Warcraft","Warcraft II","Theme Park","Theme Hospital",
+                "Transport Tycoon","The Settlers","Populous","Powermonger","Wing Commander","Wing Commander II",
+                "Privateer","X-Wing","TIE Fighter","Star Control II","Stunts","Prince of Persia","Prince of Persia 2",
+                "Another World","Flashback","Jazz Jackrabbit","Raptor: Call of the Shadows","Tyrian","One Must Fall 2097",
+                "Epic Pinball","Pinball Fantasies","Hocus Pocus","Cosmo's Cosmic Adventure","Bio Menace","Blake Stone",
+                "Major Stryker","Halloween Harry","Jill of the Jungle","Crystal Caves","Secret Agent","Dangerous Dave",
+                "Math Rescue","Word Rescue","Mortal Kombat","Mortal Kombat II","Aladdin","The Lion King","Earthworm Jim",
+                "MechWarrior 2","Magic Carpet","Carmageddon","Screamer","NASCAR Racing","IndyCar Racing",
+                "F-15 Strike Eagle II","Gunship 2000","Aces of the Pacific","Comanche","Betrayal at Krondor",
+                "Star Wars: Dark Forces","Tomb Raider","Z","Little Big Adventure","Alone in the Dark",
+                "Sid Meier's Pirates!","Railroad Tycoon","Colonization","The Incredible Machine","Oregon Trail",
+                "Where in the World is Carmen Sandiego","Lode Runner","Scorched Earth","Gorillas","SkyRoads",
+                "Wacky Wheels","Jagged Alliance","Heroes of Might and Magic II","Worms","Falcon 3.0",
+                "Microsoft Flight Simulator 5","Test Drive III","Pinball Dreams","Captain Comic","Keen Dreams",
+                "A-10 Tank Killer","Chuck Yeager's Air Combat","Stunt Island","Wolfenstein","Math Blaster"
+            ];
+            var FIXES = ['cycle timing','EMS paging','CD-audio sync','aspect ratio','keyboard layout',
+                         'turbo throttle','VESA mode 0x103','DOS4GW extender','mouse sensitivity','joystick calibration',
+                         'no-CD patch','EGA/VGA palette','speed un-throttle','protected-mode init'];
+            var IMGS  = ['DISK1.CUE','CD.ISO','GAME1.IMG','DATA.CUE','CDROM.ISO','DISC2.BIN'];
+            // Period-accurate sound-card names (casing per id/Sierra/Gravis branding — verified)
+            var MUSIC = ['Roland MT-32','Roland Sound Canvas','General MIDI','AdLib','Sound Blaster',
+                         'Sound Blaster 16','Gravis UltraSound','Pro Audio Spectrum','Sound Blaster AWE32'];
+            var SFX   = ['Sound Blaster','Sound Blaster Pro','Sound Blaster 16','Gravis UltraSound',
+                         'Pro Audio Spectrum','Disney Sound Source','PC Speaker'];
+            // Real DOS errors EmuDOS quietly auto-resolves
+            var ERRORS = [
+                {e:'Packed file is corrupt',                 f:'loadfix -32 (relocate low memory)'},
+                {e:'Runtime error 200 at 04A1:0102',         f:'patch Turbo Pascal CRT timer'},
+                {e:'DOS/4GW error (2001): exception 0Eh',    f:'reload DOS4GW extender'},
+                {e:'DPMI host not detected',                 f:'start DPMI server'},
+                {e:'Not enough memory to load sound driver', f:'remap EMS / XMS'},
+                {e:'CD-ROM not found - insert disc',         f:'imgmount d CD.ISO -t cdrom'},
+                {e:'Divide overflow',                        f:'lock CPU cycles'}
+            ];
+
+            function ri(n){ return Math.floor(Math.random() * n); }
+            function pick(a){ return a[ri(a.length)]; }
+            function chance(p){ return Math.random() < p; }
+            function dosname(s){ return (s.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8)) || 'GAME'; }
+            function grp(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }   // 1234567 -> 1 234 567
+            function dotline(label){ var s = label + ' '; while (s.length < 36) s += '.'; return s + ' '; }
+            function line(text, cls){ return [ {t:text, c:cls || ''} ]; }
+            function cmd(p, c){ return [ {t:p, c: p.indexOf('GAMES\\')>-1 ? 'path' : 'ps'}, {t:c, c:'cmd'} ]; }
+            function status(label, st, cls){
+                return [ {t:dotline(label),c:'dim'}, {t:'[ ',c:'dim'}, {t:st,c:cls}, {t:' ]',c:'dim'} ];
+            }
+
+            // A real-looking 8.3 file listing for the game's folder.
+            function dirFragment(dir, p){
+                var base = dir.length > 6 ? dir.slice(0,6) : dir;
+                var files = [ dir+'.EXE', 'SETUP.EXE', 'README.TXT', 'DOS4GW.EXE',
+                              base+'.CFG', base+pick(['.WAD','.PAK','.RES','.GRP','.DAT']) ];
+                if (chance(0.5)) files.push('INSTALL.EXE');
+                if (chance(0.5)) files.push('SOUND.CFG');
+                if (chance(0.4)) files.push('SAVE0001.SAV');
+                var dirs = [];
+                ['SAVES','SOUND','PATCHES','DATA'].forEach(function (d) { if (chance(0.4)) dirs.push(d); });
+                if (!dirs.length) dirs.push('SAVES');
+
+                var L = [ cmd(p, chance(0.22) ? 'dir' : 'dir /w'), line('', '') ];
+                var entries = dirs.map(function (d) { return {t:'['+d+']', c:'num'}; })
+                                  .concat(files.map(function (f) { return {t:f, c:''}; }));
+                for (var i = 0; i < entries.length; i += 4) {
+                    var row = [ {t:' ', c:''} ];
+                    for (var j = i; j < i + 4 && j < entries.length; j++) {
+                        var nm = entries[j].t, pad = nm; while (pad.length < 13) pad += ' ';
+                        row.push({t:nm, c:entries[j].c});
+                        row.push({t:pad.slice(nm.length) + '  ', c:'dim'});
+                    }
+                    L.push(row);
+                }
+                L.push(line('       ' + files.length + ' file(s)   ' + grp(files.length*40000 + ri(4000000)) + ' bytes', 'dim'));
+                L.push(line('       ' + dirs.length + ' dir(s)    ' + grp(400000000 + ri(220000000)) + ' bytes free', 'dim'));
+                return L;
+            }
+
+            // Mount a disc image or unzip an archive.
+            function mountFragment(dir, p){
+                if (chance(0.6)) {
+                    var L = [ cmd(p, 'imgmount d ' + pick(IMGS) + ' -t ' + (chance(0.5)?'iso':'cdrom')),
+                              status('mounted as drive D:', 'MOUNTED', 'fix') ];
+                    if (chance(0.4)) L.push(status('cd-rom audio (redbook)', 'OK', 'ok'));
+                    return L;
+                }
+                var zip = dir.slice(0,8) + '.ZIP';
+                return [ cmd(p, 'pkunzip -d ' + zip), status('extracting ' + zip, (20 + ri(180)) + ' files', 'num') ];
+            }
+
+            // Typical file operations.
+            function fileOps(dir, p){
+                switch (ri(6)) {
+                    case 0: return [ cmd(p,'type SOUND.CFG'),
+                                     line('  SoundFX = Sound Blaster', 'dim'),
+                                     line('  Music   = Roland MT-32', 'dim'),
+                                     line('  Port=220 Irq=7 Dma=1', 'dim') ];
+                    case 1: return [ cmd(p,'del *.tmp'), cmd(p,'del SAVE*.BAK') ];
+                    case 2: return [ cmd(p,'copy a:\\*.* .'), line('       ' + (4 + ri(20)) + ' file(s) copied', 'dim') ];
+                    case 3: return [ cmd(p,'cd ..'), cmd('C:\\GAMES> ','cd ' + dir) ];
+                    case 4: return [ cmd(p,'attrib -r *.sav') ];
+                    default: return [ cmd(p,'ren ' + dir.slice(0,5) + '.GRP ' + dir.slice(0,4) + '.GRP') ];
+                }
+            }
+
+            // Authentic sound-card configuration (verified real syntax).
+            function soundSetup(dir, p){
+                switch (ri(4)) {
+                    case 0:  // Sound Blaster 16 autoexec block
+                        return [ cmd(p,'set sound=c:\\sb16'),
+                                 cmd(p,'set blaster=a220 i' + pick(['5','7']) + ' d1 h5 p330 t6'),
+                                 cmd(p,'set midi=synth:1 map:e mode:0'),
+                                 cmd(p,'c:\\sb16\\diagnose /s'),
+                                 status('sound blaster 16 @ 220h', 'OK', 'ok'),
+                                 cmd(p,'c:\\sb16\\mixerset /p /q') ];
+                    case 1:  // Gravis UltraSound
+                        var port = pick(['220','240']);
+                        return [ cmd(p,'set ultrasnd=' + (port==='220'?'220,7,5,7,5':'240,7,7,7,7')),
+                                 cmd(p,'set ultradir=c:\\ultrasnd'),
+                                 cmd(p,'c:\\ultrasnd\\ultrinit.exe -ej'),
+                                 status('gravis ultrasound @ ' + port + 'h', 'OK', 'ok') ];
+                    case 2:  // Sound Blaster AWE32 wavetable
+                        return [ cmd(p,'set blaster=a220 i5 d1 h5 p330 e620 t6'),
+                                 cmd(p,'c:\\sbawe32\\aweutil /em:gm'),
+                                 status('awe32 emu8000 wavetable', 'OK', 'ok') ];
+                    default: // in-game SETUP.EXE picker (DOOM-style wording)
+                        return [ cmd(p,'setup.exe'),
+                                 line('  Current Configuration:', 'dim'),
+                                 [ {t:'    Music Device  : ', c:'dim'}, {t:pick(MUSIC), c:'ok'} ],
+                                 [ {t:'    Sound FX Device: ', c:'dim'}, {t:pick(SFX), c:'ok'} ],
+                                 line('    Port: 220   IRQ: ' + pick(['5','7']) + '   DMA: 1', 'dim') ];
+                }
+            }
+
+            function mistype(dir){ return pick([dir.toLowerCase()+'.ex', dir.toLowerCase().slice(0,4)+'.exe', 'strt.exe']); }
+
+            // Assemble one believable per-game DOS session (each line = array of {t,c} segments).
+            function genGame(){
+                var name = pick(GAMES), dir = dosname(name), exe = dir.toLowerCase() + '.exe';
+                var prompt = 'C:\\GAMES\\' + dir + '> ', L = [];
+
+                // occasional iconic floppy-drive stumble
+                if (chance(0.10)) { L.push(cmd('A:\\> ','dir'));
+                                    L.push(line('Not ready reading drive A:', 'err'));
+                                    L.push(line('Abort, Retry, Fail? a', 'err')); }
+
+                // get into the game's directory (varied)
+                switch (ri(3)) {
+                    case 0:  L.push(cmd('Z:\\> ','mount c c:\\games\\'+dir.toLowerCase()));
+                             L.push(status('drive C: mapped', 'OK', 'ok'));
+                             L.push(cmd('C:\\> ','cd '+dir)); break;
+                    case 1:  L.push(cmd('C:\\GAMES> ','cd '+dir)); break;
+                    default: L.push(cmd('C:\\> ','cd \\GAMES\\'+dir));
+                }
+
+                if (chance(0.60)) L = L.concat(dirFragment(dir, prompt));
+                if (chance(0.30)) L = L.concat(fileOps(dir, prompt));
+                if (chance(0.55)) L = L.concat(mountFragment(dir, prompt));
+                L = L.concat(soundSetup(dir, prompt));
+
+                // EmuDOS auto-config readout
+                L.push(status('conventional memory', (560 + ri(70)) + 'K free', 'num'));
+                L.push(status('cpu cycles', 'auto (' + (3000 + ri(47)*1000) + ')', 'num'));
+                if (chance(0.28)) L.push(status('roland mt-32 / cm-32l rom', 'FOUND', 'ok'));
+                if (chance(0.42)) L.push(status('box art (ScreenScraper)', 'FOUND', 'ok'));
+                if (chance(0.38)) L.push(status('applying fix: ' + pick(FIXES), 'PATCHED', 'fix'));
+
+                // launch — sometimes it stumbles and EmuDOS fixes it
+                if (chance(0.42)) {
+                    if (chance(0.5)) { L.push(cmd(prompt, mistype(dir))); L.push(line('Bad command or file name', 'err')); }
+                    var er = pick(ERRORS);
+                    L.push(cmd(prompt, exe));
+                    L.push(line(er.e, 'err'));
+                    L.push(status('EmuDOS auto-fix: ' + er.f, 'PATCHED', 'fix'));
+                }
+                L.push(cmd(prompt, exe));
+                L.push([ {t:'  >>> RUNNING ',c:'run'}, {t:name.toUpperCase(),c:'run'} ]);
+                L.push(line(' ', ''));
+                return L;
+            }
+
+            // Occasional fourth-wall winks + tiny ASCII art (printed as echo/type so they stay in-character).
+            var QUIPS = [
+                "still reading this?! fun isn't it? haha",
+                "wow, isn't it fun to watch someone else do the typing for a change? :)",
+                "yes this is a real prompt. no you can't type in it. nice try ;)",
+                "EmuDOS has now fixed more games than you've had hot dinners",
+                "fun fact: this blinking cursor has feelings too",
+                "if you're reading this you're officially a DOS nerd. welcome home.",
+                "640K ought to be enough for anybody, right? ...right?",
+                "hello there. yes, you. hi. *waves in 16 colors*",
+                "no DOS games were harmed in the making of this website",
+                "psst... drop a real game on the app and it just works like this",
+                "i could do this all day. literally. i'm a loop.",
+                "loading fun.exe ... fun loaded. you're welcome."
+            ];
+            var ARTS = [
+                ["  <('' <)    ^( '.' )^    (> '')>", "       kirby is fixing your games"],
+                ["  =^.^=  ~meow~"],
+                ["   ___", "  /o o\\   < boop >", "  \\_-_/"],
+                ["  \\(^o^)/   it works!"],
+                ["  ( >_<)   aaa too many cycles!"],
+                ["  d(-_-)b   vibing to the MT-32"],
+                ["  ( o_o)   ...", "  ( o_o)>  did you see that?", "  \\( o_o)/  A WILD SAVE STATE"],
+                ["  [>] PLAY   [#] DOOM   [*] insert quarter"]
+            ];
+            function genFun(){
+                if (chance(0.55)) {
+                    var q = pick(QUIPS);
+                    return [ cmd('C:\\EMUDOS> ', 'echo ' + q), line(q, pick(['ok','num','fix'])), line(' ', '') ];
+                }
+                var art = pick(ARTS), L = [ cmd('C:\\EMUDOS> ', 'type SMILE.ANS') ];
+                art.forEach(function (a) { L.push(line(a, 'fix')); });
+                L.push(line(' ', ''));
+                return L;
+            }
+
+            var queue = [];
+            function ensure(){ while (queue.length < 4) queue = queue.concat(chance(0.15) ? genFun() : genGame()); }
+
+            var MAX = 24;
+            var segs, si, ci, el, curSpan;
+            var cursor = document.createElement('span');
+            cursor.className = 'cursor'; cursor.setAttribute('aria-hidden','true');
+
+            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduce) {
+                ensure();
+                for (var k = 0; k < 14 && queue.length; k++) {
+                    var sg = queue.shift(), d = document.createElement('div'); d.className = 'l';
+                    sg.forEach(function (s) { var sp = document.createElement('span'); if (s.c) sp.className = s.c; sp.textContent = s.t; d.appendChild(sp); });
+                    term.appendChild(d);
+                }
+                term.appendChild(cursor);
+                return;
+            }
+
+            function typeDelay(c){ return (c === 'cmd' || c === 'ps' || c === 'path') ? 16 + ri(42) : 3 + ri(11); }
+
+            function nextLine(){
+                ensure();
+                segs = queue.shift(); si = 0; ci = 0;
+                el = document.createElement('div'); el.className = 'l';
+                term.appendChild(el); el.appendChild(cursor);
+                while (term.children.length > MAX) term.removeChild(term.firstChild);
+                step();
+            }
+            function step(){
+                if (si >= segs.length) { setTimeout(nextLine, 160 + ri(380)); return; }
+                var seg = segs[si];
+                if (ci === 0) { curSpan = document.createElement('span'); if (seg.c) curSpan.className = seg.c; el.insertBefore(curSpan, cursor); }
+                if (ci < seg.t.length) {
+                    curSpan.appendChild(document.createTextNode(seg.t.charAt(ci)));
+                    ci++; el.appendChild(cursor);
+                    setTimeout(step, typeDelay(seg.c));
+                } else { si++; ci = 0; setTimeout(step, 0); }
+            }
+            nextLine();
+        })();
+
+        // ── Feature commander (Norton-Commander style browser) ──
+        (function () {
+            var FILES = [
+                { f:'BOOKSHELF.EXE', sz:'48 128', t:'The Bookshelf', m:'Your library, as objects',
+                  d:'Your collection as box art on a wooden shelf — face-out covers, hover-to-lift, search and sort. Drop a folder, a <code>.zip</code> or a CD image anywhere on the window to import it. Each game becomes a self-contained <strong>gamebox</strong> folder you can back up or move; the library is just a rebuildable index over them.' },
+                { f:'AUTOCFG.SYS',  sz:'12 044', t:'It Just Works', m:'Known-good settings on import',
+                  d:'A curated catalog applies known-good settings on import — CPU cycles, sound card, memory, the right program to launch. Wrong values aren’t crashes, they’re a subtly broken game; EmuDOS gets them right so you don’t have to. Every setting is overridable per game, and your edits survive catalog updates.' },
+                { f:'BOXART.DLL',   sz:'31 600', t:'2D & 3D Box Art', m:'ScreenScraper + SteamGridDB',
+                  d:'Covers download automatically from ScreenScraper with a SteamGridDB fallback. Choose flat 2D or angled 3D boxes per game or library-wide — or drop in your own.' },
+                { f:'DISCSWAP.COM', sz:'9 216',  t:'Discs & Windows', m:'Multi-disc · Win9x',
+                  d:'Multi-disc games, in-game disc swapping, and even installing and booting a full Windows 9x for the games that need it.' },
+                { f:'MANUALS.EXE',  sz:'22 980', t:'Manuals, First-Class', m:'Built-in reader, remembers your page',
+                  d:'So many DOS games gated play behind a manual or code-wheel lookup. EmuDOS treats manuals as a real feature — download a game’s manual and read it in a built-in viewer that reopens on your last page.' },
+                { f:'MT32.DRV',     sz:'64 512', t:'Authentic Sound', m:'MT-32 · SB · AdLib · GM',
+                  d:'Real Roland MT-32 / CM-32L music from your own ROMs, with the module’s dot-matrix LCD on screen. Sound Blaster, AdLib, Gravis UltraSound, General MIDI and SoundFonts are all supported.' },
+                { f:'SAVESTAT.DAT', sz:'4 096',  t:'Save States', m:'Save & restore anywhere',
+                  d:'Save and restore at any moment, on top of whatever in-game saving a title already has.' },
+                { f:'LAUNCHER.COM', sz:'7 168',  t:'Smart Launcher', m:'Picks the right .EXE',
+                  d:'Picks the right executable to run automatically — no digging through a folder for the one that actually starts the game.' },
+                { f:'CAPTURE.EXE',  sz:'18 320', t:'Screenshots & Recording', m:'Frames & gameplay clips',
+                  d:'Capture a frame or record gameplay clips; files land in the game’s own folder alongside its saves.' },
+                { f:'MOUSELCK.SYS', sz:'2 560',  t:'Mouse Lock', m:'Clean capture & release',
+                  d:'Clean mouse capture and release for the point-and-click adventures and strategy games that need a real pointer.' },
+                { f:'CLOUDSYN.GIT', sz:'40 000', t:'Cloud Sync via GitHub', m:'Private repo, only yours',
+                  d:'Sign in with GitHub and EmuDOS backs up your battery saves, library database and game notes to a private repository it creates for you. Set up a new PC, sign in, and your collection and progress are right where you left them.' }
+            ];
+
+            var list = document.getElementById('ncList');
+            var detail = document.getElementById('ncDetail');
+            var rows = [];
+            var cur = 0;
+
+            FILES.forEach(function (file, i) {
+                var row = document.createElement('div');
+                row.className = 'nc-file';
+                row.setAttribute('role', 'option');
+                row.innerHTML = '<span>' + file.f + '</span><span class="sz">' + file.sz + '</span>';
+                row.addEventListener('click', function () { select(i); });
+                list.appendChild(row);
+                rows.push(row);
+            });
+
+            function select(i) {
+                cur = i;
+                rows.forEach(function (r, j) {
+                    r.classList.toggle('sel', j === i);
+                    r.setAttribute('aria-selected', j === i ? 'true' : 'false');
+                });
+                var file = FILES[i];
+                detail.innerHTML =
+                    '<h3>' + file.t + '</h3>' +
+                    '<div class="meta">' + file.f + ' &nbsp;·&nbsp; ' + file.m + '</div>' +
+                    '<p>' + file.d + '</p>';
+            }
+
+            list.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowDown') { e.preventDefault(); select((cur + 1) % FILES.length); rows[cur].scrollIntoView({block:'nearest'}); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); select((cur - 1 + FILES.length) % FILES.length); rows[cur].scrollIntoView({block:'nearest'}); }
+            });
+
+            select(0);
+        })();
+
+        // ── CRT effect toggle ──
+        (function () {
+            var btn = document.getElementById('crtToggle');
+            btn.addEventListener('click', function () {
+                var on = document.body.classList.toggle('crt');
+                btn.textContent = 'CRT: ' + (on ? 'ON' : 'OFF');
+            });
+        })();
+    </script>
+
+</body>
+</html>
