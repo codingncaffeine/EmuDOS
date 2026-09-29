@@ -6,6 +6,8 @@ A good-looking, Boxer-style DOS gaming frontend for Windows. Drop your games in 
 
 Inspired by [Boxer](http://boxerapp.com/) for the Mac, built Windows-first.
 
+**Website:** [codingncaffeine.github.io/EmuDOS](https://codingncaffeine.github.io/EmuDOS/)
+
 > **📖 Full documentation is on the [Wiki](https://github.com/codingncaffeine/EmuDOS/wiki)** — features, usage, and the tech behind it. (The same guide ships with the app as `README.txt`.)
 
 ## Highlights
